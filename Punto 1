@@ -38,7 +38,7 @@ for subcarpeta in os.listdir(ruta_base):
         if not energias_lista:
             continue
 
-        # 📌 Usar el rango más amplio posible
+        # Usar el rango más amplio posible
         energia_min = min(energia.min() for energia in energias_lista)
         energia_max = max(energia.max() for energia in energias_lista)
         energia_comun = np.linspace(energia_min, energia_max, 800)  # más puntos para más detalle
