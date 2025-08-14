@@ -1,61 +1,105 @@
-resultados_pico = []
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
 
+# Ruta base
+ruta_base = r"/content/mammography_spectra"
+
+# Parámetros de limpieza
+puntos_vecinos = 3
+prom_rel = 0.05
+margen_zoom_keV = 1.0
+
+# Diccionario para almacenar datos por elemento
+residuales = {"W": [], "Rh": [], "Mo": []}
+rangos_picos = {"W": [], "Rh": [], "Mo": []}
+
+# Procesar datos
 for subcarpeta in os.listdir(ruta_base):
     ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
     if not os.path.isdir(ruta_subcarpeta):
+        continue
+
+    # Detectar elemento por nombre de carpeta
+    if "W" in subcarpeta:
+        elemento = "W"
+    elif "Rh" in subcarpeta:
+        elemento = "Rh"
+    elif "Mo" in subcarpeta:
+        elemento = "Mo"
+    else:
         continue
 
     for archivo in os.listdir(ruta_subcarpeta):
         if not archivo.endswith(".dat"):
             continue
 
-        try:
-            df = pd.read_csv(os.path.join(ruta_subcarpeta, archivo),
-                             delim_whitespace=True, encoding='latin1', header=None, comment='#')
-        except Exception as e:
-            print(f"No se pudo leer {archivo}: {e}")
+        # Leer datos originales
+        datos = np.loadtxt(os.path.join(ruta_subcarpeta, archivo), encoding='latin1')
+        energia, conteo = datos[:, 0], datos[:, 1]
+
+        # --- Limpiar picos ---
+        picos, _ = find_peaks(conteo, prominence=prom_rel * np.max(conteo))
+        mascara = np.ones_like(conteo, dtype=bool)
+        for p in picos:
+            ini = max(0, p - puntos_vecinos)
+            fin = min(len(conteo), p + puntos_vecinos + 1)
+            mascara[ini:fin] = False
+
+        energia_sin_picos = energia[mascara]
+        conteo_sin_picos = conteo[mascara]
+
+        # --- Aproximar continuo ---
+        kind_interp = "cubic" if len(energia_sin_picos) >= 4 else "linear"
+        interp_func = interp1d(energia_sin_picos, conteo_sin_picos, kind=kind_interp, fill_value="extrapolate")
+        continuo_aprox = interp_func(energia)
+
+        # --- Calcular residual ---
+        residual = conteo - continuo_aprox
+
+        # --- Detectar picos en residual ---
+        pidx, _ = find_peaks(residual, prominence=0.01 * np.max(residual) if np.max(residual) > 0 else 1e9)
+        if len(pidx) == 0:
             continue
 
-        energia = df.iloc[:, 0].values
-        conteo = df.iloc[:, 1].values
+        emin = energia[pidx].min() - margen_zoom_keV
+        emax = energia[pidx].max() + margen_zoom_keV
 
-        # Estimar continuo usando mediana móvil
-        continuo = pd.Series(conteo).rolling(window=50, center=True, min_periods=1).median().values
-        residuo = conteo - continuo
-        residuo[residuo < 0] = 0  # eliminar ruido negativo
+        residuales[elemento].append((energia, residual, archivo))
+        rangos_picos[elemento].append((emin, emax))
 
-        # Detectar picos en el residuo
-        picos, _ = find_peaks(residuo, prominence=0.1 * np.max(residuo))
-        if len(picos) == 0:
-            continue
+# --- Graficar ---
+fig, axs = plt.subplots(3, 1, figsize=(10, 12))
+orden = ["W", "Rh", "Mo"]
+titulos = {"W": "Tungsteno (W)", "Rh": "Rodio (Rh)", "Mo": "Molibdeno (Mo)"}
 
-        # Tomar el pico más alto
-        idx_max = picos[np.argmax(residuo[picos])]
-        energia_pico = energia[idx_max]
-        altura_pico = residuo[idx_max]
+for i, elem in enumerate(orden):
+    ax = axs[i]
+    if len(residuales[elem]) == 0:
+        ax.set_title(f"{titulos[elem]} — sin picos detectables")
+        ax.set_xlabel("Energía (keV)")
+        ax.set_ylabel("Residual (picos)")
+        continue
 
-        # Ajuste gaussiano alrededor del pico
-        ventana = (energia > energia_pico - 0.5) & (energia < energia_pico + 0.5)
-        energia_fit = energia[ventana]
-        residuo_fit = residuo[ventana]
+    # Zoom global para ese elemento
+    emin_global = min(e for e, _ in rangos_picos[elem])
+    emax_global = max(e for _, e in rangos_picos[elem])
 
-        try:
-            p0 = [altura_pico, energia_pico, 0.1, 0]
-            popt, _ = curve_fit(gaussiana, energia_fit, residuo_fit, p0=p0)
-            a, x0, sigma, c = popt
-            fwhm = 2.3548 * abs(sigma)
-        except Exception as e:
-            print(f"No se pudo ajustar {archivo}: {e}")
-            a, x0, fwhm = np.nan, np.nan, np.nan
+    for energia, residual, nombre in residuales[elem]:
+        mask = (energia >= emin_global) & (energia <= emax_global)
+        ax.plot(energia[mask], residual[mask], alpha=0.7, label=nombre.replace(".dat", ""))
 
-        resultados_pico.append({
-            "elemento": subcarpeta,
-            "archivo": archivo,
-            "altura": a,
-            "posicion": x0,
-            "FWHM": fwhm
-        })
+    ax.set_title(f"Picos aislados — {titulos[elem]}")
+    ax.set_xlim(emin_global, emax_global)
+    ax.set_xlabel("Energía (keV)")
+    ax.set_ylabel("Residual (cuentas)")
+    ax.legend(ncol=4, fontsize=8)
 
+plt.tight_layout()
+plt.savefig("3.a.pdf")
+plt.show()
 
 import os
 import numpy as np
