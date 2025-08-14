@@ -1,0 +1,86 @@
+# Inicio parte opcional
+
+import zipfile
+import os
+
+# Unzip the provided data
+zip_path = '/content/drive/MyDrive/mammography_spectra.zip'
+unzip_path = '/content/mammography_spectra'
+
+if not os.path.exists(unzip_path):
+    os.makedirs(unzip_path)
+
+with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+    zip_ref.extractall(unzip_path)
+
+print(f"Data unzipped to: {unzip_path}")
+
+# Fin parte opcional
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Ruta donde están las subcarpetas con los .dat
+ruta_base = r"/content/mammography_spectra"
+
+plt.figure(figsize=(10, 6))
+
+# Recorrer cada subcarpeta (alta, media, baja energía)
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if os.path.isdir(ruta_subcarpeta):
+        energias_lista = []
+        conteos_lista = []
+
+        # Recorrer cada archivo .dat de la subcarpeta
+        for archivo in os.listdir(ruta_subcarpeta):
+            if archivo.endswith(".dat"):
+                ruta_archivo = os.path.join(ruta_subcarpeta, archivo)
+                try:
+                    with open(ruta_archivo, encoding='latin1') as f:
+                        lineas = f.readlines()
+                        datos = np.array([
+                            list(map(float, linea.strip().split()))
+                            for linea in lineas if linea.strip() and not linea.startswith('#')
+                        ])
+
+                    energia = datos[:, 0]
+                    conteo = datos[:, 1]
+
+                    energias_lista.append(energia)
+                    conteos_lista.append(conteo)
+
+                except Exception as e:
+                    print(f"Error con {ruta_archivo}: {e}")
+
+        if not energias_lista:
+            continue
+
+        # 📌 Usar el rango más amplio posible
+        energia_min = min(energia.min() for energia in energias_lista)
+        energia_max = max(energia.max() for energia in energias_lista)
+        energia_comun = np.linspace(energia_min, energia_max, 800)  # más puntos para más detalle
+
+        # Interpolar todas las curvas al eje común (fuera de su rango -> NaN)
+        conteos_interp = []
+        for energia, conteo in zip(energias_lista, conteos_lista):
+            conteos_interp.append(np.interp(energia_comun, energia, conteo, left=np.nan, right=np.nan))
+
+        # Convertir a array y promediar ignorando NaN
+        conteos_array = np.array(conteos_interp)
+        conteo_ponderado = np.nanmean(conteos_array, axis=0)
+
+        # Graficar el promedio de la carpeta
+        plt.plot(energia_comun, conteo_ponderado, label=subcarpeta)
+
+        # Mostrar información
+        print(f"{subcarpeta} → Energía min: {energia_min:.2f} keV, max: {energia_max:.2f} keV")
+
+# Ajustes de la gráfica
+plt.xlabel("Energía (keV)")
+plt.ylabel("Conteo de fotones (promedio ponderado)")
+plt.title("Espectros promediados en función de su energía")
+plt.legend()
+plt.tight_layout()
+plt.show()
