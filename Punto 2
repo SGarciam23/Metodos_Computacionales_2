@@ -1,0 +1,173 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==========================================
+# PUNTO 2.a: Ajuste gaussiano por elemento
+# ==========================================
+import pandas as pd
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+
+# Número de puntos vecinos a eliminar alrededor de un pico
+puntos_vecinos = 3
+
+# Definir la función gaussiana
+def gaussiana(x, a, x0, sigma, c):
+    return a * np.exp(-(x - x0)**2 / (2 * sigma**2)) + c
+
+ejemplos_gaussiana = []  # Lista para guardar los resultados
+representativos = {}      # Diccionario para guardar 1 espectro representativo por elemento
+
+# Seleccionar 1 archivo representativo por subcarpeta
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if not os.path.isdir(ruta_subcarpeta):
+        continue
+    for archivo in os.listdir(ruta_subcarpeta):
+        if archivo.endswith(".dat"):
+            try:
+                df = pd.read_csv(os.path.join(ruta_subcarpeta, archivo),
+                                 delim_whitespace=True, encoding='latin1', header=None, comment='#')
+            except Exception as e:
+                print(f"No se pudo leer {archivo}: {e}")
+                continue
+            # Tomar solo un archivo por subcarpeta
+            if subcarpeta not in representativos:
+                energia = df.iloc[:, 0].values
+                conteo = df.iloc[:, 1].values
+                representativos[subcarpeta] = (energia, conteo, archivo)
+                break
+
+# Graficar ajuste gaussiano
+plt.figure(figsize=(10, 6))
+for elemento, (energia, conteo, nombre) in representativos.items():
+    # Detectar picos y crear máscara para removerlos
+    picos, _ = find_peaks(conteo, prominence=0.05*np.max(conteo))
+    mascara = np.ones_like(conteo, dtype=bool)
+    for p in picos:
+        ini = max(0, p - puntos_vecinos)
+        fin = min(len(conteo), p + puntos_vecinos + 1)
+        mascara[ini:fin] = False
+
+    energia_sin_picos = energia[mascara]
+    conteo_sin_picos = conteo[mascara]
+
+    # Ajustar la curva sin picos con una gaussiana
+    try:
+        p0 = [np.max(conteo_sin_picos), energia_sin_picos[np.argmax(conteo_sin_picos)],
+              (energia_sin_picos[-1]-energia_sin_picos[0])/6, np.min(conteo_sin_picos)]
+        popt, _ = curve_fit(gaussiana, energia_sin_picos, conteo_sin_picos, p0=p0)
+        conteo_gauss = gaussiana(energia, *popt)
+    except Exception as e:
+        print(f"No se pudo ajustar {nombre}: {e}")
+        conteo_gauss = conteo_sin_picos
+
+    ejemplos_gaussiana.append((energia, conteo_gauss, nombre))
+    plt.plot(energia, conteo_gauss, label=f"{nombre} ajustado")
+
+plt.xlabel("Energía (keV)")
+plt.ylabel("Conteo de fotones (ajustado)")
+plt.title("Comparación de espectros después del ajuste gaussiano")
+plt.legend()
+plt.tight_layout()
+plt.savefig("2a.pdf")
+plt.show()
+
+
+# ==========================================
+# PUNTO 2.b: Curvas normalizadas aproximadas entre sí
+# ==========================================
+espectros_aproximados = []
+
+# Normalizar y centrar espectros para compararlos
+for energia, conteo_gauss, nombre in ejemplos_gaussiana:
+    conteo_norm = (conteo_gauss - np.min(conteo_gauss)) / (np.max(conteo_gauss) - np.min(conteo_gauss))
+    energia_centrada = energia - energia[np.argmax(conteo_gauss)]
+    espectros_aproximados.append((energia_centrada, conteo_norm, nombre))
+
+# Tomar 1 espectro por elemento para graficar
+representativos_norm = {}
+for energia_centrada, conteo_norm, nombre in espectros_aproximados:
+    elemento = nombre.split("_")[0]  # Ajustar según cómo estén nombrados los archivos
+    if elemento not in representativos_norm:
+        representativos_norm[elemento] = (energia_centrada, conteo_norm, nombre)
+
+plt.figure(figsize=(10, 6))
+for elemento, (energia_centrada, conteo_norm, nombre) in representativos_norm.items():
+    plt.plot(energia_centrada, conteo_norm, label=f"{elemento}")
+
+plt.xlabel("Energía centrada (keV)")
+plt.ylabel("Conteo normalizado")
+plt.title("Curvas representativas aproximadas entre elementos")
+plt.legend()
+plt.tight_layout()
+plt.savefig("2b.pdf")
+plt.show()
+
+
+# ==========================================
+# PUNTO 2.c: Analizar el continuo con etiquetas
+# ==========================================
+from scipy.interpolate import interp1d
+
+continuo_datos = {}
+
+# Calcular máximo, energía del máximo y FWHM
+for elemento, (energia, conteo, nombre) in representativos.items():
+    f_interp = interp1d(energia, conteo, kind='cubic')
+    x_fino = np.linspace(energia[0], energia[-1], 1000)
+    y_fino = f_interp(x_fino)
+
+    idx_max = np.argmax(y_fino)
+    y_max = y_fino[idx_max]
+    x_max = x_fino[idx_max]
+
+    half_max = y_max / 2
+    indices_above = np.where(y_fino >= half_max)[0]
+    fwhm = x_fino[indices_above[-1]] - x_fino[indices_above[0]] if len(indices_above) >= 2 else np.nan
+
+    continuo_datos[elemento] = {'x': x_fino, 'y': y_fino, 'y_max': y_max, 'x_max': x_max, 'fwhm': fwhm}
+
+# Crear subplots para mostrar características del continuo
+fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+
+# Máximo del continuo
+for elemento, datos in continuo_datos.items():
+    axs[0,0].plot([1], [datos['y_max']], 'o', label=elemento)
+    axs[0,0].text(1, datos['y_max'], f"{elemento}\nYmax={datos['y_max']:.2f}", fontsize=9)
+axs[0,0].set_title("Máximo del continuo")
+axs[0,0].set_xlabel("Voltaje del tubo (kV)")
+axs[0,0].set_ylabel("Máximo del continuo")
+axs[0,0].legend()
+
+# Energía donde ocurre el máximo
+for elemento, datos in continuo_datos.items():
+    axs[0,1].plot([1], [datos['x_max']], 'o', label=elemento)
+    axs[0,1].text(1, datos['x_max'], f"{elemento}\nXmax={datos['x_max']:.2f}", fontsize=9)
+axs[0,1].set_title("Energía donde ocurre el máximo")
+axs[0,1].set_xlabel("Voltaje del tubo (kV)")
+axs[0,1].set_ylabel("Energía (keV)")
+axs[0,1].legend()
+
+# FWHM
+for elemento, datos in continuo_datos.items():
+    axs[1,0].plot([1], [datos['fwhm']], 'o', label=elemento)
+    axs[1,0].text(1, datos['fwhm'], f"{elemento}\nFWHM={datos['fwhm']:.2f}", fontsize=9)
+axs[1,0].set_title("Ancho a media altura (FWHM)")
+axs[1,0].set_xlabel("Voltaje del tubo (kV)")
+axs[1,0].set_ylabel("FWHM (keV)")
+axs[1,0].legend()
+
+# Máximo vs energía del máximo
+for elemento, datos in continuo_datos.items():
+    axs[1,1].plot(datos['x_max'], datos['y_max'], 'o', label=elemento)
+    axs[1,1].text(datos['x_max'], datos['y_max'], f"{elemento}\n({datos['x_max']:.2f}, {datos['y_max']:.2f})", fontsize=9)
+axs[1,1].set_title("Máximo vs energía del máximo")
+axs[1,1].set_xlabel("Energía del máximo (keV)")
+axs[1,1].set_ylabel("Máximo del continuo")
+axs[1,1].legend()
+
+plt.tight_layout()
+plt.savefig(os.path.join(ruta_base, "2c_continuo_etiquetas.pdf"))
+plt.show()
