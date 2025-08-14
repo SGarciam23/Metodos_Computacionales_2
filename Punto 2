@@ -21,6 +21,9 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Ruta donde están las subcarpetas con los .dat
+ruta_base = r"/content/mammography_spectra"
+
 # ==========================================
 # PUNTO 2.a: Ajuste gaussiano por elemento
 # ==========================================
