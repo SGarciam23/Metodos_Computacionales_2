@@ -1,0 +1,247 @@
+resultados_pico = []
+
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if not os.path.isdir(ruta_subcarpeta):
+        continue
+
+    for archivo in os.listdir(ruta_subcarpeta):
+        if not archivo.endswith(".dat"):
+            continue
+
+        try:
+            df = pd.read_csv(os.path.join(ruta_subcarpeta, archivo),
+                             delim_whitespace=True, encoding='latin1', header=None, comment='#')
+        except Exception as e:
+            print(f"No se pudo leer {archivo}: {e}")
+            continue
+
+        energia = df.iloc[:, 0].values
+        conteo = df.iloc[:, 1].values
+
+        # Estimar continuo usando mediana móvil
+        continuo = pd.Series(conteo).rolling(window=50, center=True, min_periods=1).median().values
+        residuo = conteo - continuo
+        residuo[residuo < 0] = 0  # eliminar ruido negativo
+
+        # Detectar picos en el residuo
+        picos, _ = find_peaks(residuo, prominence=0.1 * np.max(residuo))
+        if len(picos) == 0:
+            continue
+
+        # Tomar el pico más alto
+        idx_max = picos[np.argmax(residuo[picos])]
+        energia_pico = energia[idx_max]
+        altura_pico = residuo[idx_max]
+
+        # Ajuste gaussiano alrededor del pico
+        ventana = (energia > energia_pico - 0.5) & (energia < energia_pico + 0.5)
+        energia_fit = energia[ventana]
+        residuo_fit = residuo[ventana]
+
+        try:
+            p0 = [altura_pico, energia_pico, 0.1, 0]
+            popt, _ = curve_fit(gaussiana, energia_fit, residuo_fit, p0=p0)
+            a, x0, sigma, c = popt
+            fwhm = 2.3548 * abs(sigma)
+        except Exception as e:
+            print(f"No se pudo ajustar {archivo}: {e}")
+            a, x0, fwhm = np.nan, np.nan, np.nan
+
+        resultados_pico.append({
+            "elemento": subcarpeta,
+            "archivo": archivo,
+            "altura": a,
+            "posicion": x0,
+            "FWHM": fwhm
+        })
+
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from numpy.polynomial import Polynomial
+
+
+# Configuración general
+
+ruta_base = r"/content/mammography_spectra"
+
+prom_rel_continuo = 0.05
+puntos_vecinos = 3
+
+# Detección y ajuste en el residual
+prom_rel_residual = 0.01
+ventana_ajuste_keV = 1.5
+
+# Grado máximo del polinomio del continuo (adaptativo si hay pocos puntos)
+grado_max = 4
+
+# Modelo gaussiano + offset
+def gauss_con_offset(x, A, mu, sigma, c):
+    return A * np.exp(-(x - mu)*2 / (2.0 * sigma*2)) + c
+
+
+# Resultados
+resultados = {
+    "W": {"volt": [], "altura": [], "fwhm": []},
+    "Rh": {"volt": [], "altura": [], "fwhm": []},
+    "Mo": {"volt": [], "altura": [], "fwhm": []}
+}
+
+# Recorrer carpetas/archivos
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if not os.path.isdir(ruta_subcarpeta):
+        continue
+
+    # Detectar elemento
+    if "W" in subcarpeta:
+        elemento = "W"
+    elif "Rh" in subcarpeta:
+        elemento = "Rh"
+    elif "Mo" in subcarpeta:
+        elemento = "Mo"
+    else:
+        continue
+
+    for archivo in os.listdir(ruta_subcarpeta):
+        if not archivo.endswith(".dat"):
+            continue
+
+        # Extraer voltaje del nombre del archivo
+        volt_str = "".join(ch for ch in archivo if ch.isdigit())
+        if not volt_str:
+            continue
+        voltaje = int(volt_str)
+
+        # Leer espectro
+        # Use latin1 encoding as in previous cells that succeeded
+        datos = np.loadtxt(os.path.join(ruta_subcarpeta, archivo), encoding='latin1')
+        energia, conteo = datos[:, 0], datos[:, 1]
+
+        # (1) Limpiar picos del continuo (sin interpolar)
+        if np.max(conteo) <= 0:
+            continue
+
+        picos_cont, _ = find_peaks(conteo, prominence=prom_rel_continuo * np.max(conteo))
+        mascara = np.ones_like(conteo, dtype=bool)
+        for p in picos_cont:
+            ini = max(0, p - puntos_vecinos)
+            fin = min(len(conteo), p + puntos_vecinos + 1)
+            mascara[ini:fin] = False
+
+        e_sin = energia[mascara]
+        c_sin = conteo[mascara]
+
+        # Asegurar suficientes puntos para ajustar un polinomio
+        if len(e_sin) < 3:
+            # Demasiado pocos puntos para estimar continuo de forma fiable
+            continue
+
+        # Grado adaptativo (no mayor que grado_max ni que len(e_sin)-1)
+        grado = min(grado_max, max(1, len(e_sin) - 1))
+
+        # Ajuste polinomial estable (sin interpolación)
+        # Polynomial.fit mapea internamente el dominio para estabilidad numérica
+        try:
+            poly = Polynomial.fit(e_sin, c_sin, deg=grado)
+            continuo = poly(energia)
+        except Exception:
+            # Si el ajuste falla por mala condición, intentamos con grado menor
+            exito = False
+            for g in range(min(grado-1, 3), 0, -1):
+                try:
+                    poly = Polynomial.fit(e_sin, c_sin, deg=g)
+                    continuo = poly(energia)
+                    exito = True
+                    break
+                except Exception:
+                    continue
+            if not exito:
+                continue
+
+        # (2) Residual (picos)
+        residual = conteo - continuo
+        if np.max(residual) <= 0:
+            continue
+
+        pidx, _ = find_peaks(residual, prominence=prom_rel_residual * np.max(residual))
+        if len(pidx) == 0:
+            continue
+
+        # Pico mayor
+        idx_max = pidx[np.argmax(residual[pidx])]
+        mu_ini = energia[idx_max]
+        A_ini = residual[idx_max]
+        c_ini = np.median(residual)
+
+        # Ventana local para el ajuste
+        mask_fit = (energia >= mu_ini - ventana_ajuste_keV/2) & (energia <= mu_ini + ventana_ajuste_keV/2)
+        xfit = energia[mask_fit]
+        yfit = residual[mask_fit]
+
+        if len(xfit) < 6:
+            # ampliar por índices si la ventana quedó muy estrecha
+            i0 = max(0, idx_max - 5)
+            i1 = min(len(energia), idx_max + 6)
+            xfit = energia[i0:i1]
+            yfit = residual[i0:i1]
+        if len(xfit) < 4:
+            # demasiados pocos puntos para fit
+            continue
+
+        # (3) Ajuste Gaussiano del pico mayor
+        try:
+            popt, _ = curve_fit(
+                gauss_con_offset, xfit, yfit,
+                p0=[A_ini, mu_ini, 0.30, c_ini],
+                bounds=([0.0, mu_ini - 1.0, 0.05, -np.inf],
+                        [np.inf, mu_ini + 1.0, 2.00,  np.inf]),
+                maxfev=10000
+            )
+            A, mu, sigma, c0 = popt
+            fwhm = 2.0 * np.sqrt(2.0 * np.log(2.0)) * sigma
+
+            resultados[elemento]["volt"].append(voltaje)
+            resultados[elemento]["altura"].append(A)
+            resultados[elemento]["fwhm"].append(fwhm)
+        except Exception:
+            # Si el ajuste falla, saltamos este espectro
+            continue
+
+# Graficar resultados
+fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+colores = {"W": "C0", "Rh": "C1", "Mo": "C2"}
+
+# Altura vs Voltaje
+for elem, color in colores.items():
+    v = np.array(resultados[elem]["volt"])
+    A = np.array(resultados[elem]["altura"])
+    if len(v) == 0:
+        continue
+    idx = np.argsort(v)
+    axs[0].plot(v[idx], A[idx], 'o-', label=elem)
+axs[0].set_title("Altura del pico mayor vs Voltaje")
+axs[0].set_xlabel("Voltaje (kV)")
+axs[0].set_ylabel("Altura (cuentas)")
+axs[0].legend()
+
+# FWHM vs Voltaje
+for elem, color in colores.items():
+    v = np.array(resultados[elem]["volt"])
+    w = np.array(resultados[elem]["fwhm"])
+    if len(v) == 0:
+        continue
+    idx = np.argsort(v)
+    axs[1].plot(v[idx], w[idx], 'o-', label=elem)
+axs[1].set_title("FWHM del pico mayor vs Voltaje")
+axs[1].set_xlabel("Voltaje (kV)")
+axs[1].set_ylabel("FWHM (keV)")
+axs[1].legend()
+
+plt.tight_layout()
+plt.savefig("3.b.pdf")
+plt.show()
