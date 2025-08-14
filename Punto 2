@@ -1,3 +1,22 @@
+# Inicio parte opcional
+
+import zipfile
+import os
+
+# Unzip the provided data
+zip_path = '/content/drive/MyDrive/mammography_spectra.zip'
+unzip_path = '/content/mammography_spectra'
+
+if not os.path.exists(unzip_path):
+    os.makedirs(unzip_path)
+
+with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+    zip_ref.extractall(unzip_path)
+
+print(f"Data unzipped to: {unzip_path}")
+
+# Fin parte opcional
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
