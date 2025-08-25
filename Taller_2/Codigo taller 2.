@@ -90,7 +90,50 @@ plt.tight_layout()
 plt.savefig("2.b.maxima.pdf")
 plt.close(
 
+#Punto 4
 
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+from astropy.timeseries import LombScargle
+
+ruta = Path(r"C:\Users\usuario\OneDrive\Escritorio\Universidad\Materias\Metodos Computacionales 2\mammography_spectra\OGLE-LMC-CEP-0001.dat")
+
+if not Path(ruta).exists():
+    raise FileNotFoundError(f"No encuentro el archivo en: {ruta}")
+
+# === 2) Leer datos: tiempo (t), magnitud (m), incertidumbre (dm)
+t, m, dm = np.loadtxt(ruta, unpack=True, comments="#")
+
+# === 3) Periodograma Lomb-Scargle (datos irregulares)
+# Rango razonable para una cefeida: 0.01–2 ciclos/día (ajustable)
+min_freq = 0.01
+max_freq = 2.0
+freqs = np.linspace(min_freq, max_freq, 10000)
+
+ls = LombScargle(t, m, dm)
+power = ls.power(freqs)
+
+best_freq = freqs[np.argmax(power)]
+best_period = 1.0 / best_freq
+
+print(f"Frecuencia dominante: {best_freq:.6f} ciclos/día")
+print(f"Período correspondiente: {best_period:.6f} días")
+
+# === 4) Calcular fase y graficar brillo vs fase
+phi = np.mod(best_freq * t, 1.0)
+
+plt.figure(figsize=(7,5))
+plt.errorbar(phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
+plt.gca().invert_yaxis()  # magnitud: menor = más brillante
+plt.xlabel("Fase (ϕ)")
+plt.ylabel("Magnitud")
+plt.title(f"Brillo vs fase  |  f = {best_freq:.6f} c/d,  P = {best_period:.3f} d")
+plt.grid(True, alpha=0.4)
+plt.legend()
+plt.tight_layout()
+plt.savefig("4.pdf")
+#plt.show()
 
 #Punto 5
 
