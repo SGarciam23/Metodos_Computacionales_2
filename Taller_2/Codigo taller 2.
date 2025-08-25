@@ -1,4 +1,195 @@
 
+import numpy as np
+import matplotlib.pyplot as plt
+from numba import njit
+from scipy.signal import peak_widths
+from scipy.optimize import curve_fit
+from scipy.fft import fft, fftfreq
+from scipy.stats import linregress
+
+#1a
+@njit
+def Fourier(t: np.ndarray, y: np.ndarray, f: np.ndarray) -> np.ndarray:
+    r = np.zeros(len(f), dtype=np.complex128)
+    for j in range(len(f)):
+        r[j] = np.sum(y * np.exp(-2j * np.pi * t * f[j]))
+    return r
+
+def plot_fourier(frecuencias: np.ndarray, fourier_con_ruido: np.ndarray, fourier_sin_ruido: np.ndarray, y: np.ndarray, y_ruido: np.ndarray) -> None:
+    fig, ax = plt.subplots(1, 2, figsize=(10, 6), layout='constrained')
+
+    # Componente DC real (promedio de la señal en el tiempo)
+    dc_sin = np.mean(y)
+    dc_con = np.mean(y_ruido)
+
+    # Magnitud de la transformada (normalizada por N)
+    N = len(y)
+    mag_sin = np.abs(fourier_sin_ruido) / N
+    mag_con = np.abs(fourier_con_ruido) / N
+
+    # Graficar sin ruido
+    ax[0].bar(frecuencias, mag_sin, width=2, label="Espectro")
+    ax[0].bar(0, np.abs(dc_sin), color="red", label="Promedio (DC)")  # pico en f=0
+    ax[0].set_title("Magnitud sin ruido en función de la frecuencia (Hz)")
+    ax[0].set_xlabel("Frecuencia (Hz)")
+    ax[0].set_ylabel("Magnitud normalizada")
+    ax[0].grid(True)
+    ax[0].legend()
+
+    # Graficar con ruido
+    ax[1].bar(frecuencias, mag_con, width=2, label="Espectro")
+    ax[1].bar(0, np.abs(dc_con), color="red", label="Promedio (DC)")  # pico en f=0
+    ax[1].set_title("Magnitud con ruido en función de la frecuencia (Hz)")
+    ax[1].set_xlabel("Frecuencia (Hz)")
+    ax[1].set_ylabel("Magnitud normalizada")
+    ax[1].grid(True)
+    ax[1].legend()
+
+    plt.savefig("1.a.pdf")
+    #plt.show()
+
+
+# === Generar datos de prueba (1.a) ===
+N = 1000                 # número de puntos
+t = np.linspace(0, 1, N) # tiempo (1s)
+f_signal = 50            # frecuencia de la señal en Hz
+y = np.sin(2 * np.pi * f_signal * t)   # señal pura
+y_ruido = y + 0.5*np.random.randn(N)   # señal con ruido
+
+# Definir frecuencias a calcular
+frecuencias = np.linspace(0, 200, 400)
+
+# Calcular Fourier
+fourier_sin_ruido = Fourier(t, y, frecuencias)
+fourier_con_ruido = Fourier(t, y_ruido, frecuencias)
+
+# Graficar inciso (a)
+plot_fourier(frecuencias, fourier_con_ruido, fourier_sin_ruido, y, y_ruido)
+
+
+#1b
+def generar_senal(t, freq, SNtime):
+    A = SNtime * freq
+    signal = A * np.sin(2 * np.pi * freq * t)
+    noise = np.random.normal(0, 1, len(t))
+    return signal + noise, signal, noise
+
+def calcular_SNfreq(t, y, freq, f_eval):
+    Y = Fourier(t, y, f_eval)
+    P = np.abs(Y)
+    peak = np.max(P)
+    mask = (f_eval < freq*0.8) | (f_eval > freq*1.2)
+    noise_std = np.std(P[mask])
+    return peak / noise_std
+
+# Parámetros
+tmax = 5
+dt = 0.01
+t = np.arange(0, tmax, dt)
+freq = 2.0
+f_eval = np.linspace(0, 10, 2000)
+
+SNtime_values = np.logspace(-2, 0, 20)
+SNfreq_values = []
+
+for SNtime in SNtime_values:
+    y, s, n = generar_senal(t, freq, SNtime)
+    SNfreq = calcular_SNfreq(t, y, freq, f_eval)
+    SNfreq_values.append(SNfreq)
+
+SNfreq_values = np.array(SNfreq_values)
+
+# Ajuste en log-log
+log_SNtime = np.log10(SNtime_values)
+log_SNfreq = np.log10(SNfreq_values)
+slope, intercept, r_value, _, _ = linregress(log_SNtime, log_SNfreq)
+fit_line = 10**(intercept + slope * log_SNtime)
+
+plt.figure(figsize=(7,5))
+plt.loglog(SNtime_values, SNfreq_values, 'o-', label="Datos simulados")
+plt.loglog(SNtime_values, fit_line, '--', label=f"Ajuste ~ SNtime^{slope:.2f}")
+plt.xlabel("SNtime")
+plt.ylabel("SNfreq")
+plt.title("Relación SNfreq vs SNtime")
+plt.legend()
+plt.grid(True, which="both", ls="--", alpha=0.6)
+plt.savefig("1.b.pdf")
+#plt.show()
+
+print(f"Modelo encontrado: SNfreq ≈ (SNtime^{slope:.2f}) * {10**intercept:.2f}")
+
+#1c
+def generar_datos(A=1.0, freq=5.0, tmax=10.0, dt=0.01, SNtime=0.5):
+    t = np.arange(0, tmax, dt)
+    señal = A * np.sin(2 * np.pi * freq * t)
+    ruido = (A / SNtime) * np.random.normal(0, 1, len(t))
+    return t, señal + ruido
+
+def medir_fwhm(t, y, freq):
+    if len(t) < 2:   # chequeo para evitar error
+        return None
+    N = len(t)
+    dt = t[1] - t[0]
+    freqs = fftfreq(N, dt)
+    Y = np.abs(fft(y))**2
+    mask = freqs > 0
+    freqs = freqs[mask]
+    Y = Y[mask]
+    idx_peak = np.argmax(Y)
+    peak_height = Y[idx_peak]
+    half_max = peak_height / 2
+    left_idx = np.where(Y[:idx_peak] < half_max)[0]
+    right_idx = np.where(Y[idx_peak:] < half_max)[0]
+    if len(left_idx) == 0 or len(right_idx) == 0:
+        return None
+    left = freqs[left_idx[-1]]
+    right = freqs[idx_peak + right_idx[0]]
+    return right - left
+
+A = 1.0
+freq = 5.0
+dt = 0.01
+SNtime = 0.5
+tmax_values = np.linspace(-30, 15, 30)  # ⬅ empieza en 0.5 en lugar de 0
+fwhm_values = []
+
+for tmax in tmax_values:
+    t, y = generar_datos(A=A, freq=freq, tmax=tmax, dt=dt, SNtime=SNtime)
+    fwhm = medir_fwhm(t, y, freq)
+    fwhm_values.append(fwhm if fwhm is not None else np.nan)
+
+plt.figure(figsize=(7,5))
+plt.plot(tmax_values, fwhm_values, 'o-', label="Ancho del pico (FWHM)")
+plt.xlabel("tmax (s)")
+plt.ylabel("Ancho del pico (Hz)")
+plt.title("Dependencia del ancho del pico en función de tmax")
+plt.grid(True)
+plt.legend()
+plt.savefig("1.c.pdf")
+#plt.show()
+
+#Bono
+def plot_aliasing(f_signal=50, duracion=0.1):
+    fs_values = [200, 120, 80, 60]
+    t_cont = np.linspace(0, duracion, 5000)
+    y_cont = np.sin(2*np.pi*f_signal*t_cont)
+    fig, axs = plt.subplots(len(fs_values), 1, figsize=(8, 8), sharex=True)
+    for i, fs in enumerate(fs_values):
+        t = np.arange(0, duracion, 1/fs)
+        y = np.sin(2*np.pi*f_signal*t)
+        axs[i].plot(t_cont, y_cont, 'k--', label='Señal continua')
+        axs[i].stem(t, y, linefmt='C0-', markerfmt='C0o', basefmt=" ", label=f'Muestreo fs={fs} Hz')
+        axs[i].legend()
+        axs[i].grid(True)
+        axs[i].set_ylabel("Amplitud")
+    axs[-1].set_xlabel("Tiempo (s)")
+    plt.suptitle("BONO: Aliasing al muestrear más allá de Nyquist", fontsize=14)
+    plt.tight_layout()
+    plt.savefig("BONO.pdf")
+    #plt.show()
+
+plot_aliasing()
+
 #punto 2.
 
 import numpy as np
