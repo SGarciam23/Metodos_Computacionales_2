@@ -281,6 +281,39 @@ plt.tight_layout()
 plt.savefig("2.b.maxima.pdf")
 plt.close(
 
+#Punto 3
+
+#3.a.
+def desenfoque_gaussiano(imagen_path, A):
+  imagen = np.array(Image.open(imagen_path).convert("RGB"), dtype=float)
+  imagen_borrosa = np.zeros_like(imagen)
+
+  for c in range(3):
+    canal = imagen[:, :, c]
+    # FFT centrada
+    F = fft2(canal)
+    F_shift = fftshift(F)
+
+    # Filtro gaussiano
+    h, w = canal.shape
+    y, x = np.indices((h, w))
+    cx, cy = w // 2, h // 2
+    gauss = np.exp(-((x - cx)**2 + (y - cy)**2) / (2 * A**2))
+
+    # Filtrado en frecuencia
+    F_filtrado = F_shift * gauss
+
+    # Transformada inversa
+    imagen_borrosa[:, :, c] = np.abs(ifft2(ifftshift(F_filtrado)))
+
+  Image.fromarray(np.uint8(imagen_borrosa)).save("3.a.jpg")
+
+desenfoque_gaussiano("miette.jpg", 20)
+
+#3.b.a.
+
+#3.b.b.
+
 #Punto 4
 
 import numpy as np
