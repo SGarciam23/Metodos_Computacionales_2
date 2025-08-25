@@ -7,6 +7,10 @@ from scipy.optimize import curve_fit
 from scipy.fft import fft, fftfreq
 from scipy.stats import linregress
 
+#=========
+# PUNTO 1
+#=========
+
 #1a
 @njit
 def Fourier(t: np.ndarray, y: np.ndarray, f: np.ndarray) -> np.ndarray:
@@ -190,7 +194,9 @@ def plot_aliasing(f_signal=50, duracion=0.1):
 
 plot_aliasing()
 
-#punto 2.
+#=========
+# PUNTO 2
+#=========
 
 import numpy as np
 import pandas as pd
@@ -281,7 +287,9 @@ plt.tight_layout()
 plt.savefig("2.b.maxima.pdf")
 plt.close(
 
-#Punto 3
+#=========
+# PUNTO 3
+#=========
 
 #3.a.
 def desenfoque_gaussiano(imagen_path, A):
@@ -314,7 +322,9 @@ desenfoque_gaussiano("miette.jpg", 20)
 
 #3.b.b.
 
-#Punto 4
+#=========
+# PUNTO 4
+#=========
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -359,7 +369,9 @@ plt.tight_layout()
 plt.savefig("4.pdf")
 #plt.show()
 
-#Punto 5
+#=========
+# PUNTO 5
+#=========
 
 import numpy as np
 import matplotlib.pyplot as plt
