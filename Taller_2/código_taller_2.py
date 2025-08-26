@@ -5,6 +5,7 @@ from scipy.signal import peak_widths
 from scipy.optimize import curve_fit
 from scipy.fft import fft, fftfreq
 from scipy.stats import linregress
+from numpy.typing import NDArray
 
 #=========
 # PUNTO 1
@@ -12,62 +13,68 @@ from scipy.stats import linregress
 
 #1a
 @njit
-def Fourier(t: np.ndarray, y: np.ndarray, f: np.ndarray) -> np.ndarray:
-    r = np.zeros(len(f), dtype=np.complex128)
-    for j in range(len(f)):
-        r[j] = np.sum(y * np.exp(-2j * np.pi * t * f[j]))
-    return r
-
-def plot_fourier(frecuencias: np.ndarray, fourier_con_ruido: np.ndarray, fourier_sin_ruido: np.ndarray, y: np.ndarray, y_ruido: np.ndarray) -> None:
-    fig, ax = plt.subplots(1, 2, figsize=(10, 6), layout='constrained')
-
-    # Componente DC real (promedio de la señal en el tiempo)
-    dc_sin = np.mean(y)
-    dc_con = np.mean(y_ruido)
-
-    # Magnitud de la transformada (normalizada por N)
-    N = len(y)
-    mag_sin = np.abs(fourier_sin_ruido) / N
-    mag_con = np.abs(fourier_con_ruido) / N
-
-    # Graficar sin ruido
-    ax[0].bar(frecuencias, mag_sin, width=2, label="Espectro")
-    ax[0].bar(0, np.abs(dc_sin), color="red", label="Promedio (DC)")  # pico en f=0
-    ax[0].set_title("Magnitud sin ruido en función de la frecuencia (Hz)")
-    ax[0].set_xlabel("Frecuencia (Hz)")
-    ax[0].set_ylabel("Magnitud normalizada")
-    ax[0].grid(True)
-    ax[0].legend()
-
-    # Graficar con ruido
-    ax[1].bar(frecuencias, mag_con, width=2, label="Espectro")
-    ax[1].bar(0, np.abs(dc_con), color="red", label="Promedio (DC)")  # pico en f=0
-    ax[1].set_title("Magnitud con ruido en función de la frecuencia (Hz)")
-    ax[1].set_xlabel("Frecuencia (Hz)")
-    ax[1].set_ylabel("Magnitud normalizada")
-    ax[1].grid(True)
-    ax[1].legend()
-
-    plt.savefig("1.a.pdf")
-    #plt.show()
+def Fourier_transform(t: NDArray[np.float64],
+                      y: NDArray[np.float64],
+                      f: NDArray[np.float64]) -> NDArray[np.complex128]:
+    """
+    Calcula la transformada discreta de Fourier en frecuencias arbitrarias f.
+    Definición: F_k = sum_{i=1}^N y_i * exp(-2π i f_k t_i)
+    """
+    N = len(t)
+    resultados = np.zeros(len(f), dtype=np.complex128)
+    for k in range(len(f)):
+        exp_term = np.exp(-2j * np.pi * f[k] * t)
+        resultados[k] = np.sum(y * exp_term)
+    return resultados
 
 
-# === Generar datos de prueba (1.a) ===
-N = 1000                 # número de puntos
-t = np.linspace(0, 1, N) # tiempo (1s)
-f_signal = 50            # frecuencia de la señal en Hz
-y = np.sin(2 * np.pi * f_signal * t)   # señal pura
-y_ruido = y + 0.5*np.random.randn(N)   # señal con ruido
+# === Generación de señales de prueba ===
+t_max = 1.0
+dt = 0.001
+t = np.arange(0, t_max, dt)
 
-# Definir frecuencias a calcular
-frecuencias = np.linspace(0, 200, 400)
+# Señal con varias frecuencias
+amplitudes = np.array([1.0, 0.5, 0.3])
+frecuencias_componentes = np.array([5.0, 15.0, 30.0])
 
-# Calcular Fourier
-fourier_sin_ruido = Fourier(t, y, frecuencias)
-fourier_con_ruido = Fourier(t, y_ruido, frecuencias)
+y = np.zeros_like(t)
+for A, f in zip(amplitudes, frecuencias_componentes):
+    y += A * np.sin(2 * np.pi * f * t)
 
-# Graficar inciso (a)
-plot_fourier(frecuencias, fourier_con_ruido, fourier_sin_ruido, y, y_ruido)
+# Señal con ruido
+ruido = 0.5
+y_ruido = y + ruido * np.random.randn(len(t))
+
+# Definir las frecuencias a evaluar (no tienen que coincidir con el tamaño de los datos)
+f_eval = np.linspace(0, 50, 500)
+
+# Calcular la transformada en esas frecuencias
+F = Fourier_transform(t, y, f_eval)
+F_ruido = Fourier_transform(t, y_ruido, f_eval)
+
+# === Graficar ===
+plt.figure(figsize=(12, 5))
+
+# Señal sin ruido
+plt.subplot(1, 2, 1)
+plt.plot(f_eval, np.abs(F), label="Magnitud |F|")
+plt.title("Espectro sin ruido")
+plt.xlabel("Frecuencia (Hz)")
+plt.ylabel("Magnitud")
+plt.grid(True)
+plt.legend()
+
+# Señal con ruido
+plt.subplot(1, 2, 2)
+plt.plot(f_eval, np.abs(F_ruido), label="Magnitud |F| con ruido")
+plt.title("Espectro con ruido")
+plt.xlabel("Frecuencia (Hz)")
+plt.ylabel("Magnitud")
+plt.grid(True)
+plt.legend()
+
+plt.tight_layout()
+plt.show()
 
 
 #1b
