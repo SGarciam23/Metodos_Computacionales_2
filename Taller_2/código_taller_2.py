@@ -484,17 +484,22 @@ n_angles, n_detectors = projections.shape
 rows = n_detectors
 angles = np.linspace(0.0, 180.0, n_angles, endpoint=False)
 
-# --- High-pass filter (ramp + Hann) ---
+# --- High-pass filter (Shepp-Logan) ---
+print("Usando filtro: Shepp-Logan")
 freqs = rfftfreq(n_detectors, d=1.0)
 ramp = np.abs(freqs)
-hann = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(len(ramp)) / (len(ramp) - 1))
-ramp_windowed = ramp * hann
+
+# El filtro Shepp-Logan es una rampa multiplicada por una función sinc
+# para suavizar las altas frecuencias y reducir el ruido.
+# np.sinc(x) en numpy es sin(pi*x)/(pi*x)
+shepp_logan_filter = ramp * np.sinc(freqs)
+shepp_logan_filter[0] = 0 # Asegurar que la frecuencia cero es cero
 
 filtered = np.empty_like(projections, dtype=float)
 for i in range(n_angles):
     p = projections[i].astype(float)
     P = rfft(p)
-    Pf = P * ramp_windowed
+    Pf = P * shepp_logan_filter
     filtered[i] = irfft(Pf, n=n_detectors)
 
 # --- Reconstrucción SIN filtro ---
