@@ -1,3 +1,145 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
+# --------------------------------------------------
+# 1.a Sistema depredador-presa (Lotka–Volterra)
+# --------------------------------------------------
+def lotka_volterra(t, z, alpha=2, beta=1.5, gamma=0.3, delta=0.4):
+    x, y = z
+    dxdt = alpha*x - beta*x*y
+    dydt = -gamma*y + delta*x*y
+    return [dxdt, dydt]
+
+def conserved_lv(x, y, alpha=2, beta=1.5, gamma=0.3, delta=0.4):
+    return delta*x - gamma*np.log(x) + beta*y - alpha*np.log(y)
+
+def simulate_lotka_volterra():
+    t_span = (0, 50)
+    t_eval = np.linspace(*t_span, 2000)
+    sol = solve_ivp(lotka_volterra, t_span, [3, 2], t_eval=t_eval, rtol=1e-9, atol=1e-9)
+    x, y = sol.y
+    V = conserved_lv(x, y)
+
+    fig, axs = plt.subplots(3, 1, figsize=(6, 8))
+    axs[0].plot(sol.t, x, label="Presas (x)")
+    axs[0].plot(sol.t, y, label="Depredadores (y)")
+    axs[0].set_ylabel("Población")
+    axs[0].legend()
+
+    axs[1].plot(x, y)
+    axs[1].set_xlabel("x (presas)")
+    axs[1].set_ylabel("y (depredadores)")
+
+    axs[2].plot(sol.t, V)
+    axs[2].set_xlabel("Tiempo")
+    axs[2].set_ylabel("Cantidad conservada V")
+
+    fig.tight_layout()
+    plt.savefig("1.a.pdf")
+    plt.close()
+
+
+# --------------------------------------------------
+# 1.b Problema de Landau
+# --------------------------------------------------
+def landau(t, z, q=7.5284, B0=0.438, E0=0.7423, m=3.8428, k=1.0014):
+    x, y, vx, vy = z
+    ax = (q*E0*(np.sin(k*x) + k*x*np.cos(k*x)) + q*B0*vy) / m
+    ay = (-q*B0*vx) / m
+    return [vx, vy, ax, ay]
+
+def conserved_landau(x, y, vx, vy, q=7.5284, B0=0.438, E0=0.7423, m=3.8428, k=1.0014):
+    Piy = m*vy - q*B0*x
+    energy = 0.5*m*(vx**2 + vy**2) - q*E0*x*np.sin(k*x)
+    return Piy, energy
+
+def simulate_landau():
+    t_span = (0, 30)
+    t_eval = np.linspace(*t_span, 3000)
+    sol = solve_ivp(landau, t_span, [0, 0, 1, 0], t_eval=t_eval, rtol=1e-9, atol=1e-9)
+    x, y, vx, vy = sol.y
+    Piy, E = conserved_landau(x, y, vx, vy)
+
+    fig, axs = plt.subplots(3, 1, figsize=(6, 8))
+    axs[0].plot(x, y)
+    axs[0].set_xlabel("x")
+    axs[0].set_ylabel("y")
+
+    axs[1].plot(sol.t, Piy)
+    axs[1].set_ylabel("Momento conjugado Πy")
+
+    axs[2].plot(sol.t, E)
+    axs[2].set_xlabel("Tiempo")
+    axs[2].set_ylabel("Energía total")
+
+    fig.tight_layout()
+    plt.savefig("1.b.pdf")
+    plt.close()
+
+
+# --------------------------------------------------
+# 1.c Sistema binario (gravedad)
+# --------------------------------------------------
+def binary_system(t, z, G=1, m=1.7):
+    r1x, r1y, r2x, r2y, v1x, v1y, v2x, v2y = z
+    dx = r2x - r1x
+    dy = r2y - r1y
+    r = np.sqrt(dx**2 + dy**2)
+    F = G*m*m / r**3
+    a1x, a1y = F*dx/m, F*dy/m
+    a2x, a2y = -F*dx/m, -F*dy/m
+    return [v1x, v1y, v2x, v2y, a1x, a1y, a2x, a2y]
+
+def conserved_binary(r1, r2, v1, v2, G=1, m=1.7):
+    dx, dy = r2 - r1
+    r = np.sqrt(dx**2 + dy**2)
+    v1sq, v2sq = np.dot(v1, v1), np.dot(v2, v2)
+    E = 0.5*m*(v1sq+v2sq) - G*m*m/r
+    L = m*(np.cross(r1, v1) + np.cross(r2, v2))
+    return E, L
+
+def simulate_binary():
+    t_span = (0, 10)
+    t_eval = np.linspace(*t_span, 2000)
+    z0 = [0, 0, 1, 1, 0, 0.5, 0, -0.5]
+    sol = solve_ivp(binary_system, t_span, z0, t_eval=t_eval, rtol=1e-9, atol=1e-9)
+    r1 = sol.y[0:2].T
+    r2 = sol.y[2:4].T
+    v1 = sol.y[4:6].T
+    v2 = sol.y[6:8].T
+
+    E, L = [], []
+    for i in range(len(sol.t)):
+        e, l = conserved_binary(r1[i], r2[i], v1[i], v2[i])
+        E.append(e); L.append(l)
+
+    fig, axs = plt.subplots(3, 1, figsize=(6, 8))
+    axs[0].plot(r1[:,0], r1[:,1], label="Estrella 1")
+    axs[0].plot(r2[:,0], r2[:,1], label="Estrella 2")
+    axs[0].legend()
+
+    axs[1].plot(sol.t, E)
+    axs[1].set_ylabel("Energía total")
+
+    axs[2].plot(sol.t, L)
+    axs[2].set_xlabel("Tiempo")
+    axs[2].set_ylabel("Momento angular total")
+
+    fig.tight_layout()
+    plt.savefig("1.c.pdf")
+    plt.close()
+
+
+# --------------------------------------------------
+# Ejecutar todo el punto 1
+# --------------------------------------------------
+if __name__ == "__main__":
+    simulate_lotka_volterra()
+    simulate_landau()
+    simulate_binary()
+
+
 # -----------------------------
 # PUNTO 2
 # -----------------------------
