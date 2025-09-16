@@ -431,3 +431,70 @@ plt.xlim(XMIN_GLOBAL, XMAX_GLOBAL)
 plt.legend()
 plt.grid(alpha=0.3)
 plt.show()
+
+# -----------------------------
+# PUNTO 4
+# -----------------------------
+
+import numpy as np
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+
+# Parámetros
+alpha = 1.0   # mg/kl
+t_max = 1e4
+
+# Condiciones iniciales
+r0 = 1.0
+theta0 = np.pi / 2
+dr0 = 0.0
+dtheta0 = 0.0
+y0 = [r0, dr0, theta0, dtheta0]
+
+# Ecuaciones de movimiento
+def elastic_pendulum(t, y):
+  r, dr, theta, dtheta = y
+  d2r = r * dtheta**2 - alpha * (r - 1)
+  d2theta = - (2 * dr * dtheta) / r - np.sin(theta) / r
+  return [dr, d2r, dtheta, d2theta]
+
+# Evento: cruce por el eje vertical hacia abajo (y < 0)
+def crossing_event(t, y):
+  r, dr, theta, dtheta = y
+  return np.cos(theta)  # cruce cuando cos(theta) = 0
+
+crossing_event.terminal = False
+crossing_event.direction = 0  # solo cuando pasa hacia abajo
+
+# Integración
+sol = solve_ivp(
+    elastic_pendulum,
+    [0, t_max],
+    y0,
+    method='DOP853',
+    max_step=0.1,
+    events=crossing_event
+)
+
+# Extraer puntos de Poincaré
+r_vals = []
+Pr_vals = []  # P_r = dr
+
+for state in sol.y_events[0]:
+  r, dr, theta, dtheta = state
+  if np.cos(theta) > 0: # y < 0
+    r_vals.append(r)
+    Pr_vals.append(dr)
+
+# Graficar P_r vs r y guardar en PDF
+plt.figure(figsize=(6, 6))
+plt.scatter(r_vals, Pr_vals, s=2, color='blue')
+plt.xlabel(r"$r$")
+plt.ylabel(r"$P_r$")
+plt.title("Diagrama de Poincaré: $P_r$ vs $r$")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("4.pdf")  # Guarda en PDF
+plt.close()
+
+
