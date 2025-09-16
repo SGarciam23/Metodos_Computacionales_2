@@ -651,4 +651,109 @@ plt.tight_layout()
 plt.savefig("4.pdf")  # Guarda en PDF
 plt.close()
 
+# -----------------------------
+# PUNTO 7
+# -----------------------------
 
+import numpy as np
+from scipy.integrate import solve_ivp
+import pandas as pd
+
+def lane_emden(xi, y, n):
+  theta, phi = y
+  dtheta = phi
+  # Handle the singularity at xi=0
+  dphi = -theta**n - (2/xi)*phi if xi != 0 else 0
+  return [dtheta, dphi]
+
+def solve_lane_emden(n, xi_max=100, tol=1e-10): # Increased xi_max
+  # Conditions near xi=0 using series expansion
+  xi0 = 1e-8
+  theta0 = 1 - (n/6)*xi0**2
+  phi0 = -(n/3)*xi0/2
+  sol = solve_ivp(lane_emden, [xi0, xi_max], [theta0, phi0], args=(n,),
+                    rtol=1e-12, atol=1e-12, max_step=0.01)
+
+  xi_vals = sol.t
+  theta_vals = sol.y[0]
+  phi_vals = sol.y[1]
+
+  # Find the first zero of theta
+  zero_crossings = np.where(theta_vals <= tol)[0] # Use tolerance for zero crossing
+  if len(zero_crossings) == 0:
+      # If no zero crossing found within xi_max, raise an error or handle appropriately
+      # For now, let's increase xi_max further or refine the search.
+      # As a quick fix, let's return nan or inf for cases where zero is not found
+      return np.nan, np.nan, np.nan
+
+
+  idx = zero_crossings[0]
+  # Ensure we have at least two points for interpolation
+  if idx == 0:
+      idx = 1 # Use the first two points if the first point is already <= tolerance
+
+  xi1, xi2 = xi_vals[idx-1], xi_vals[idx]
+  th1, th2 = theta_vals[idx-1], theta_vals[idx]
+
+  # Linear interpolation to find xi_f where theta is exactly zero
+  # Avoid division by zero if th1 and th2 are very close
+  if abs(th2 - th1) < 1e-12:
+      xi_f = xi1
+  else:
+      xi_f = xi1 - th1*(xi2 - xi1)/(th2 - th1)
+
+
+  # Derivative at xi_f by linear interpolation
+  ph1 = phi_vals[idx-1]
+  ph2 = phi_vals[idx]
+  # Avoid division by zero if xi1 and xi2 are very close
+  if abs(xi2 - xi1) < 1e-12:
+      phi_f = ph1
+  else:
+      phi_f = ph1 + (ph2 - ph1)*(xi_f - xi1)/(xi2 - xi1)
+
+
+  # Relative mass and density ratio
+  M_rel = -xi_f**2 * phi_f
+  rho_ratio = xi_f / (-3 * phi_f)
+
+  return xi_f, M_rel, rho_ratio
+
+# Final table
+n_values = [0, 1, 1.5, 2, 3, 4, 5] # Added n=0 and n=1 back
+data = []
+
+# Special cases
+# n=0: analytical solution
+xi_f_0 = np.sqrt(6)
+phi_f_0 = -xi_f_0/3
+M_rel_0 = -xi_f_0**2 * phi_f_0
+rho_ratio_0 = 1.0
+
+# n=1: analytical solution
+xi_f_1 = np.pi
+phi_f_1 = -1/np.pi
+M_rel_1 = -xi_f_1**2 * phi_f_1
+rho_ratio_1 = xi_f_1 / (-3 * phi_f_1)
+
+
+# n=5: analytical solution
+xi_f_5 = np.inf
+M_rel_5 = 1.0
+rho_ratio_5 = np.inf
+
+
+for n in n_values:
+  if n == 0:
+      data.append([n, xi_f_0, M_rel_0, rho_ratio_0])
+  elif n == 1:
+      data.append([n, xi_f_1, M_rel_1, rho_ratio_1])
+  elif n == 5:
+    data.append([n, xi_f_5, M_rel_5, rho_ratio_5])
+  else:
+    xi_f, M_rel, rho_ratio = solve_lane_emden(n)
+    data.append([n, xi_f, M_rel, rho_ratio])
+
+df = pd.DataFrame(data, columns=["Índice n", "Radio", "Masa", "rho_c / <rho>"])
+print(df.to_string(index=False))
+df.to_csv("7.csv", index=False)
