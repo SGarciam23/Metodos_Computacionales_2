@@ -43,35 +43,70 @@ def simulate_lotka_volterra():
 # --------------------------------------------------
 # 1.b Problema de Landau
 # --------------------------------------------------
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
 def landau(t, z, q=7.5284, B0=0.438, E0=0.7423, m=3.8428, k=1.0014):
+    """
+    Ecuaciones de movimiento para el problema de Landau.
+    z = [x, y, vx, vy]
+    """
     x, y, vx, vy = z
     ax = (q*E0*(np.sin(k*x) + k*x*np.cos(k*x)) + q*B0*vy) / m
     ay = (-q*B0*vx) / m
     return [vx, vy, ax, ay]
 
 def conserved_landau(x, y, vx, vy, q=7.5284, B0=0.438, E0=0.7423, m=3.8428, k=1.0014):
+    """
+    Cantidades conservadas:
+    - Momento conjugado Πy
+    - Energía total
+    """
     Piy = m*vy - q*B0*x
     energy = 0.5*m*(vx**2 + vy**2) - q*E0*x*np.sin(k*x)
     return Piy, energy
 
 def simulate_landau():
+    # intervalo temporal y malla
     t_span = (0, 30)
     t_eval = np.linspace(*t_span, 3000)
-    sol = solve_ivp(landau, t_span, [0, 0, 1, 0], t_eval=t_eval, rtol=1e-9, atol=1e-9)
+
+    # condición inicial [x, y, vx, vy]
+    z0 = [0, 0, 1, 0]
+
+    # resolver usando un integrador de alta precisión
+    sol = solve_ivp(
+        landau, t_span, z0, t_eval=t_eval,
+        rtol=1e-9, atol=1e-9,
+        method="DOP853", max_step=0.01
+    )
+
     x, y, vx, vy = sol.y
     Piy, E = conserved_landau(x, y, vx, vy)
 
+    # energía relativa para que se vea plana
+    E_rel = (E - E[0]) / E[0]
+
+    # gráficas
     fig, axs = plt.subplots(3, 1, figsize=(6, 8))
+
+    # trayectoria
     axs[0].plot(x, y)
     axs[0].set_xlabel("x")
     axs[0].set_ylabel("y")
+    axs[0].set_title("Trayectoria en el plano (x,y)")
 
+    # momento conjugado
     axs[1].plot(sol.t, Piy)
     axs[1].set_ylabel("Momento conjugado Πy")
+    axs[1].set_title("Conservación de Πy")
 
-    axs[2].plot(sol.t, E)
+    # energía relativa
+    axs[2].plot(sol.t, E_rel)
     axs[2].set_xlabel("Tiempo")
-    axs[2].set_ylabel("Energía total")
+    axs[2].set_ylabel("ΔE / E0")
+    axs[2].set_title("Conservación de la energía (relativa)")
 
     fig.tight_layout()
     plt.savefig("1.b.pdf")
