@@ -193,7 +193,7 @@ m = 10      # Masa del proyectil (kg)
 A, B, C = 1.642, 40.624, 2.36
 
 # ======================================
-# Definición de β(y)
+# Definición de β(y) coeficiente de resistencia del aire
 # ======================================
 def beta_y(y):
     return A * (1 - y / B) ** C if y < B else 0.0
