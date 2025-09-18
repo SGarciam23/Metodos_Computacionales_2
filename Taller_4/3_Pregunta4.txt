@@ -1,0 +1,14 @@
+
+ANÁLISIS DE LA CONDICIÓN DE ESTABILIDAD (CFL) PARA KdV
+=========================================================
+
+La ecuación de Korteweg-de Vries (KdV) contiene un término no lineal (u*u_x) y un término dispersivo (u_xxx). Cada uno impone una restricción sobre el paso de tiempo (dt) para que la simulación numérica sea estable.
+
+1.  Término no lineal: Requiere dt ∝ dx.
+2.  Término dispersivo: Requiere dt ∝ dx³.
+
+La condición más restrictiva es la del término dispersivo. Por lo tanto, para garantizar la estabilidad, se debe cumplir que:
+
+    dt / dx³ < C
+
+donde C es una constante que depende del esquema numérico. Si dt es demasiado grande en relación con dx, la simulación se volverá inestable, y los errores crecerán exponencialmente.

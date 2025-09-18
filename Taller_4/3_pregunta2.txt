@@ -1,0 +1,6 @@
+ANÁLISIS DE CONSERVACIÓN DURANTE LA INTERACCIÓN
+================================================
+Momento (∫ψ²) inicial : 34.541456
+Momento (∫ψ²) final    : 33.137101
+
+Los valores son casi idénticos, demostrando la conservación.
