@@ -1,5 +1,7 @@
-import numpy as np
 
+#-----------------
+#PUNTO 2
+#-----------------
 import os
 import numpy as np
 import pandas as pd
