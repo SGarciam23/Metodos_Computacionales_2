@@ -8,15 +8,17 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import ndimage
 
 
-N = 500            
-J = 1.0            
-beta = 0.5         
-steps = 2000000     
+N = 500          
+J = 1.0         
+beta = 0.5        
+steps = 2000000    
 
 np.random.seed(42)
 spins = np.random.choice([-1, 1], size=(N, N))
+
 
 def energia_total(spins):
     E = 0
@@ -27,34 +29,52 @@ def energia_total(spins):
                           spins[i, (j+1)%N] + spins[i, (j-1)%N])
     return E / 2  # cada par contado dos veces
 
+#Intento del bono
+def mean_cluster_area(spins, target_spin=1, exclude_largest=False):
+    mask = (spins == target_spin)
+    structure = np.array([[0,1,0],
+                          [1,1,1],
+                          [0,1,0]])  # conectividad 4
+    labeled, n_clusters = ndimage.label(mask, structure=structure)
+    if n_clusters == 0:
+        return 0.0
+    counts = np.bincount(labeled.ravel())[1:]  # quitar fondo
+    if exclude_largest and counts.size > 1:
+        counts = counts[counts != counts.max()]
+    return counts.mean() if counts.size > 0 else 0.0
+
+
 E = energia_total(spins)
 M = spins.sum()
 
 energias = []
 magnetizaciones = []
+clusters_mean = []
+
+check_interval = (N*N) // 10
+
 
 for step in range(steps):
     i = np.random.randint(0, N)
     j = np.random.randint(0, N)
-    
+
     s = spins[i, j]
     vecinos = (spins[(i+1)%N, j] + spins[(i-1)%N, j] +
                spins[i, (j+1)%N] + spins[i, (j-1)%N])
-    
     dE = 2 * J * s * vecinos
-    
+
     if dE <= 0 or np.random.rand() < np.exp(-beta * dE):
         spins[i, j] *= -1
         E += dE
         M += 2 * spins[i, j]
-    
-    if step % (N*N // 10) == 0:
+
+    if step % check_interval == 0:
         energias.append(E / (4 * N * N))
         magnetizaciones.append(M / (N * N))
+        
+        clusters_mean.append(mean_cluster_area(spins, target_spin=1))
 
-# ------------------------------
-# Gráfica conjunta
-# ------------------------------
+
 plt.figure(figsize=(8,5))
 plt.plot(energias, label="Energía normalizada")
 plt.plot(magnetizaciones, label="Magnetización normalizada")
@@ -64,6 +84,19 @@ plt.legend()
 plt.title("Evolución del modelo de Ising 2D")
 plt.tight_layout()
 plt.savefig("1a_resultados.pdf")
+plt.close()
+
+# -----------------------------
+# Gráfica tamaño promedio de clusters
+# -----------------------------
+plt.figure(figsize=(8,5))
+plt.plot(clusters_mean, label="Tamaño promedio de clusters (+1)")
+plt.xlabel("Iteraciones (x10⁴)")
+plt.ylabel("Área promedio")
+plt.legend()
+plt.title("Evolución del tamaño promedio de clusters")
+plt.tight_layout()
+plt.savefig("clusters_mean.pdf")
 plt.close()
 
 # ------------------------------
