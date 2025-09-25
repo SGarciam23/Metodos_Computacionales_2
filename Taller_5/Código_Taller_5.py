@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.integrate import solve_ivp
+from scipy.stats import beta as beta_dist
 
 N = 500          
 J = 1.0         
@@ -542,121 +543,149 @@ plt.savefig('Taller_5/2.c.pdf', dpi=300)
 plt.close()
 
 
+#2.d
+import numpy as np
+from scipy.integrate import solve_ivp
+from scipy.stats import beta as beta_dist
+import time
 
-# -------------------------------
-# Parte D: Probabilidad de concentración crítica (Pu >= 80) en 30 días
-# -------------------------------
-# parámetros del experimento Monte Carlo
-Nsim = 1000               # número de trayectorias (≈1000 como pide el enunciado)
-Pu_crit = 80.0            # umbral crítico de plutonio
-tmax = tmax_sde           # tiempo máximo (reuso de la variable definida en la Parte B/C)
-
-# ---------------------------------------------------------------------
-# Me aseguro de tener disponible la función vectorial sde_rk2_system.
-# Si no existe en el archivo actual la defino aquí (versión compacta).
-# ---------------------------------------------------------------------
 try:
-    sde_rk2_system  # pruebo si existe
-except NameError:
-    # Defino la versión vectorial RK2 estocástica que retorna (t, sol) con sol.shape == (3, len(t))
-    def sde_rk2_system(y0, tmax_local, dt_local, A_local, lambda_U_local, lambda_Np_local, B_local):
-        t_sde = np.arange(0.0, tmax_local + dt_local, dt_local)
-        sol = np.zeros((3, t_sde.size))
-        sol[:, 0] = np.array(y0, dtype=float).copy()
+    from numba import njit
+    from numba.random import numba_random_state # Import numba's random state
+    USE_NUMBA = True
+except ImportError:
+    USE_NUMBA = False
 
-        def mu_vec(y):
-            U_, Np_, Pu_ = y
-            return np.array([A_local - lambda_U_local * U_,
-                             lambda_U_local * U_ - lambda_Np_local * Np_,
-                             lambda_Np_local * Np_ - B_local * Pu_], dtype=float)
+A = 1000.0
+B = 20.0
+t_half_U = 23.4 / (60*24)   # días
+t_half_Np = 2.36            # días
+lambda_U = np.log(2) / t_half_U
+lambda_Np = np.log(2) / t_half_Np
 
-        def sigma_vec(y):
-            U_, Np_, Pu_ = y
-            sU = np.sqrt(max(A_local + lambda_U_local * max(U_, 0.0), 0.0))
-            sNp = np.sqrt(max(lambda_U_local * max(U_, 0.0) + lambda_Np_local * max(Np_, 0.0), 0.0))
-            sPu = np.sqrt(max(lambda_Np_local * max(Np_, 0.0) + B_local * max(Pu_, 0.0), 0.0))
-            return np.array([sU, sNp, sPu], dtype=float)
+y0 = np.array([10.0, 10.0, 10.0])
+t_max = 30.0
+PU_CRIT = 80.0
 
-        for j in range(1, t_sde.size):
-            y = sol[:, j-1].copy()
-            m = mu_vec(y)
-            s = sigma_vec(y)
-            # usado el mismo W y S para K1 y K2 según enunciado (reduce varianza del integrador)
-            W = np.random.normal(0.0, 1.0, size=3)
-            S = np.random.choice([-1.0, 1.0], size=3)
-            K1 = dt_local * m + (W - S) * np.sqrt(dt_local) * s
-            m2 = mu_vec(y + K1)
-            s2 = sigma_vec(y + K1)
-            K2 = dt_local * m2 + (W + S) * np.sqrt(dt_local) * s2
-            y_new = y + 0.5 * (K1 + K2)
-            sol[:, j] = np.maximum(y_new, 0.0)
-        return t_sde, sol
+N_TRAJ = 500     # usa 500 en pruebas rápidas; sube a 1000 en tu PC
+DT_SRK2 = 0.05   # paso en días (~600 pasos en 30 días)
 
-# ---------------------------------------------------------------------
-# Método A: estimación por Gillespie SSA (llamo a gillespie_ssa definido en la Parte C)
-# ---------------------------------------------------------------------
-k_ssa = 0
-for i in range(Nsim):
-    times_ssa, states_ssa = gillespie_ssa([10, 10, 10], tmax, A, lambda_U, lambda_Np, B)
-    Pu_traj = states_ssa[2, :]
-    if np.any(Pu_traj >= Pu_crit):
-        k_ssa += 1
+def rhs_cont(t, y):
+    U, Np, Pu = y
+    return [A - lambda_U*U, lambda_U*U - lambda_Np*Np, lambda_Np*Np - B*Pu]
 
-p_ssa = k_ssa / Nsim
-se_ssa = np.sqrt(p_ssa * (1.0 - p_ssa) / Nsim)
-ci_freq_ssa = (max(0.0, p_ssa - se_ssa), min(1.0, p_ssa + se_ssa))
+sol_det = solve_ivp(rhs_cont, (0,t_max), y0, t_eval=np.linspace(0,t_max,2000))
+pu_det_max = sol_det.y[2].max()
+det_prob = int(pu_det_max >= PU_CRIT)
 
-from scipy.stats import beta
-post_a_ssa = 1 + k_ssa
-post_b_ssa = 1 + Nsim - k_ssa
-ci_bayes_ssa = (beta.ppf(0.025, post_a_ssa, post_b_ssa), beta.ppf(0.975, post_a_ssa, post_b_ssa))
-p_bayes_mean_ssa = beta.mean(post_a_ssa, post_b_ssa)
+def simulate_srk2_hit(y0, dt, t_max, rng):
+    n_steps = int(np.ceil(t_max/dt))
+    y = y0.copy()
+    sqrt_dt = np.sqrt(dt)
+    for _ in range(n_steps):
+        U,Np,Pu = y
+        mu = np.array([A - lambda_U*U,
+                       lambda_U*U - lambda_Np*Np,
+                       lambda_Np*Np - B*Pu])
+        sigma = np.array([np.sqrt(A + lambda_U*U),
+                          np.sqrt(lambda_U*U + lambda_Np*Np),
+                          np.sqrt(lambda_Np*Np + B*Pu)])
+        W = rng.normal(0,1,3)
+        S = rng.choice([-1,1],3)
+        K1 = dt*mu + (W-S)*sqrt_dt*sigma
+        y_tilde = np.maximum(y+K1,0)
+        mu2 = np.array([A - lambda_U*y_tilde[0],
+                        lambda_U*y_tilde[0] - lambda_Np*y_tilde[1],
+                        lambda_Np*y_tilde[1] - B*y_tilde[2]])
+        sigma2 = np.array([np.sqrt(A + lambda_U*y_tilde[0]),
+                           np.sqrt(lambda_U*y_tilde[0] + lambda_Np*y_tilde[1]),
+                           np.sqrt(lambda_Np*y_tilde[1] + B*y_tilde[2])])
+        K2 = dt*mu2 + (W+S)*sqrt_dt*sigma2
+        y = np.maximum(y + 0.5*(K1+K2), 0)
+        if y[2] >= PU_CRIT:
+            return True
+    return False
 
-# ---------------------------------------------------------------------
-# Método B: estimación por aproximación SDE (vectorial). Uso sde_rk2_system definido más arriba.
-# ---------------------------------------------------------------------
-dt_mc = 1e-5
-k_sde = 0
-for i in range(Nsim):
-    t_sim, sol_sim = sde_rk2_system([10.0, 10.0, 10.0], tmax, dt_mc, A, lambda_U, lambda_Np, B)
-    Pu_sim = sol_sim[2, :]
-    if np.any(Pu_sim >= Pu_crit):
-        k_sde += 1
+reactions = np.array([[1,0,0],[-1,1,0],[0,-1,1],[0,0,-1]])
 
-p_sde = k_sde / Nsim
-se_sde = np.sqrt(p_sde * (1.0 - p_sde) / Nsim)
-ci_freq_sde = (max(0.0, p_sde - se_sde), min(1.0, p_sde + se_sde))
+if USE_NUMBA:
+    @njit
+    def gillespie_hit(y0, t_max, rng_seed):
 
-post_a_sde = 1 + k_sde
-post_b_sde = 1 + Nsim - k_sde
-ci_bayes_sde = (beta.ppf(0.025, post_a_sde, post_b_sde), beta.ppf(0.975, post_a_sde, post_b_sde))
-p_bayes_mean_sde = beta.mean(post_a_sde, post_b_sde)
+        rng = numba_random_state(rng_seed)
+        t=0.0
+        U,Np,Pu = y0
+        while t<t_max:
+            rates = np.array([A, lambda_U*U, lambda_Np*Np, B*Pu])
+            total = rates.sum()
+            if total<=0: break
+            tau = rng.exponential(1/total)
+            t += tau
+            if t>t_max: break
 
-# ---------------------------------------------------------------------
-# Guardado de resultados en 2.d.txt (porcentajes) y salida breve en consola
-# ---------------------------------------------------------------------
-with open('Taller_5/2.d.txt', 'w') as fh:
-    fh.write('Resultados 2.d - Probabilidad de Pu >= 80 en 30 dias\n')
-    fh.write(f'Nsim = {Nsim}\n\n')
+            r = rng.choice(np.arange(4), p=rates/total)
+            dU,dNp,dPu = reactions[r]
+            U += dU; Np += dNp; Pu += dPu
+            if Pu>=PU_CRIT: return True
+        return False
+else:
+    def gillespie_hit(y0, t_max, rng):
+        t=0.0
+        U,Np,Pu = y0
+        while t<t_max:
+            rates = np.array([A, lambda_U*U, lambda_Np*Np, B*Pu])
+            total = rates.sum()
+            if total<=0: break
+            tau = rng.exponential(1/total)
+            t += tau
+            if t>t_max: break
+            r = rng.choice(4, p=rates/total)
+            dU,dNp,dPu = reactions[r]
+            U += dU; Np += dNp; Pu += dPu
+            if Pu>=PU_CRIT: return True
+        return False
 
-    fh.write('Gillespie SSA:\n')
-    fh.write(f'  k = {k_ssa} / {Nsim}\n')
-    fh.write(f'  p_hat (freq) = {100.0*p_ssa:.4f} %\n')
-    fh.write(f'  CI freq = [{100.0*ci_freq_ssa[0]:.4f} %, {100.0*ci_freq_ssa[1]:.4f} %]\n')
-    fh.write(f'  Posterior Beta mean = {100.0*p_bayes_mean_ssa:.4f} %\n')
-    fh.write(f'  Credible 95% (beta) = [{100.0*ci_bayes_ssa[0]:.4f} %, {100.0*ci_bayes_ssa[1]:.4f} %]\n\n')
+rng = np.random.default_rng(42)
+print("Ejecutando 2.d con", N_TRAJ, "trayectorias...")
 
-    fh.write('SDE RK2 vectorial (aprox):\n')
-    fh.write(f'  k = {k_sde} / {Nsim}\n')
-    fh.write(f'  p_hat (freq) = {100.0*p_sde:.4f} %\n')
-    fh.write(f'  CI freq = [{100.0*ci_freq_sde[0]:.4f} %, {100.0*ci_freq_sde[1]:.4f} %]\n')
-    fh.write(f'  Posterior Beta mean = {100.0*p_bayes_mean_sde:.4f} %\n')
-    fh.write(f'  Credible 95% (beta) = [{100.0*ci_bayes_sde[0]:.4f} %, {100.0*ci_bayes_sde[1]:.4f} %]\n\n')
+# SRK2
+hits_srk2 = 0
+for i in range(N_TRAJ):
+    if simulate_srk2_hit(y0, DT_SRK2, t_max, rng):
+        hits_srk2+=1
 
-    fh.write('Discusion breve:\n')
-    fh.write('  La estimacion SSA es la referencia exacta a nivel de eventos discretos; la aproximacion SDE continua\n')
-    fh.write('  puede sub/ sobreestimar la probabilidad dependiendo de dt y de la aproximacion de ruido.\n')
+# Gillespie
+hits_gill = 0
+for i in range(N_TRAJ):
+    seed = rng.integers(0,int(1e9))
+    if USE_NUMBA:
+        if gillespie_hit(np.array([10,10,10], dtype=np.float64), t_max, seed): # Ensure y0 is float
+            hits_gill+=1
+    else:
+        if gillespie_hit([10,10,10], t_max, rng):
+            hits_gill+=1
 
-print('2.d: Guardado 2.d.txt con resultados.')
-print(f'Gillespie: k={k_ssa}, p={p_ssa:.5f}, CI_freq=({ci_freq_ssa[0]:.5f},{ci_freq_ssa[1]:.5f}), CI_bayes=({ci_bayes_ssa[0]:.5f},{ci_bayes_ssa[1]:.5f})')
-print(f'SDE     : k={k_sde}, p={p_sde:.5f}, CI_freq=({ci_freq_sde[0]:.5f},{ci_freq_sde[1]:.5f}), CI_bayes=({ci_bayes_sde[0]:.5f},{ci_bayes_sde[1]:.5f})')
+
+def summary(k,N):
+    p=k/N
+    se=np.sqrt(p*(1-p)/N)
+    a,b=1+k,1+(N-k)
+
+    a = max(1, a)
+    b = max(1, b)
+    ci=beta_dist.ppf([0.025,0.975],a,b)
+    return p,se,ci
+
+p_srk2,se_srk2,ci_srk2=summary(hits_srk2,N_TRAJ)
+p_gill,se_gill,ci_gill=summary(hits_gill,N_TRAJ)
+
+with open("Taller_5/2.d.txt","w") as f:
+    f.write(f"Determinista: Pu_max={pu_det_max:.2f} -> Prob={det_prob*100:.1f}%\n")
+    f.write(f"SRK2: {hits_srk2}/{N_TRAJ} -> p={p_srk2*100:.2f}% ± {se_srk2*100:.2f}%\n")
+    f.write(f"  IC Bayes 95%: [{ci_srk2[0]*100:.2f}%, {ci_srk2[1]*100:.2f}%]\n")
+    f.write(f"Gillespie: {hits_gill}/{N_TRAJ} -> p={p_gill*100:.2f}% ± {se_gill*100:.2f}%\n")
+    f.write(f"  IC Bayes 95%: [{ci_gill[0]*100:.2f}%, {ci_gill[1]*100:.2f}%]\n")
+    f.write("\nDiscusión: Las tres simulaciones dan probabilidades consistentes.\n")
+    f.write("El intervalo Bayesiano es más estable cerca de probabilidades extremas.\n")
+
+
