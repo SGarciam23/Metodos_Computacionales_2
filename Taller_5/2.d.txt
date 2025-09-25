@@ -1,0 +1,20 @@
+Resultados 2.d - Probabilidad de Pu >= 80 en 30 dias
+Nsim = 1000
+
+Gillespie SSA:
+  k = 184 / 1000
+  p_hat (freq) = 18.4000 %
+  CI freq = [17.1747 %, 19.6253 %]
+  Posterior Beta mean = 18.4631 %
+  Credible 95% (beta) = [16.1226 %, 20.9228 %]
+
+SDE RK2 vectorial (aprox):
+  k = 976 / 1000
+  p_hat (freq) = 97.6000 %
+  CI freq = [97.1160 %, 98.0840 %]
+  Posterior Beta mean = 97.5050 %
+  Credible 95% (beta) = [96.4535 %, 98.3774 %]
+
+Discusion breve:
+  La estimacion SSA es la referencia exacta a nivel de eventos discretos; la aproximacion SDE continua
+  puede sub/ sobreestimar la probabilidad dependiendo de dt y de la aproximacion de ruido.
