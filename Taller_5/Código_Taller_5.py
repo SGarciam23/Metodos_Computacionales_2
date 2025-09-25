@@ -344,7 +344,7 @@ for beta in betas:
     meanE = E_vals.mean()
     meanE2 = (E_vals**2).mean()
     # fórmula correcta con energía por espín
-    Cv = beta*2 * (meanE2 - meanE*2)
+    Cv = beta**2 * (meanE2 - meanE**2)
     Cv_vals.append(Cv)
 
 # ------------------------------
