@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.integrate import solve_ivp
 
-
+"""
 N = 500          
 J = 1.0         
 beta = 0.5        
@@ -268,7 +268,7 @@ plt.title(f"Specific heat vs β (N={N})")
 plt.legend()
 plt.tight_layout()
 plt.savefig("1.b.pdf")
-plt.show()
+plt.show()"""
 
 
 
@@ -423,6 +423,7 @@ dt = 0.0001
 n_traj = 5
 tiempos, trayectorias = RK2_U(A, lambdaU, U_0, T, dt, n_traj)
 
+plt.figure(figsize=(8,5))
 plt.plot(tiempos, trayectorias[0], label='U ruta 1')
 plt.plot(tiempos, trayectorias[1], label='U ruta 2')
 plt.plot(tiempos, trayectorias[2], label='U ruta 3')
@@ -495,25 +496,55 @@ plt.plot(t, U, color='C0', label='Determinista U', linewidth=2)
 plt.plot(t, Np, color='C1', label='Determinista Np', linewidth=2)
 plt.plot(t, Pu, color='C2', label='Determinista Pu', linewidth=2)
 
+# -------- Gráficas con subplots --------
+n_ssa = 5
+fig, axes = plt.subplots(3, 1, figsize=(7, 10), sharex=True)
+
+# -------- U --------
+axes[0].plot(t, U, color='C0', label='Determinista U', linewidth=2)
 for j in range(n_ssa):
     times_ssa, states_ssa = gillespie_ssa([10, 10, 10], tmax_sde, A, lambda_U, lambda_Np, B)
-    # dibujo como escalones para mostrar naturaleza discreta
-    plt.step(times_ssa, states_ssa[0, :], where='post', color='C0', alpha=0.6)
-    plt.step(times_ssa, states_ssa[1, :], where='post', color='C1', alpha=0.6)
-    plt.step(times_ssa, states_ssa[2, :], where='post', color='C2', alpha=0.6)
+    axes[0].step(times_ssa, states_ssa[0, :], where='post', color='C0', alpha=0.6)
+axes[0].set_ylabel('Cantidad U')
+axes[0].set_xscale('log')
+axes[0].set_yscale('log')
+axes[0].set_title('Trayectorias Gillespie SSA vs determinista (U)')
+axes[0].grid(True)
+axes[0].legend()
 
-plt.xlabel('Tiempo (días)')
-plt.ylabel('Cantidad (unidades)')
-plt.xscale('log') # escala logarítmica en x para ver mejor el inicio
-plt.yscale('log') # escala logarítmica en y para ver mejor el inicio
-plt.title('Trayectorias Gillespie SSA (discretas) vs determinista')
-plt.grid(True)
-plt.legend()
+# -------- Np --------
+axes[1].plot(t, Np, color='C1', label='Determinista Np', linewidth=2)
+for j in range(n_ssa):
+    times_ssa, states_ssa = gillespie_ssa([10, 10, 10], tmax_sde, A, lambda_U, lambda_Np, B)
+    axes[1].step(times_ssa, states_ssa[1, :], where='post', color='C1', alpha=0.6)
+axes[1].set_ylabel('Cantidad Np')
+axes[1].set_xscale('log')
+axes[1].set_yscale('log')
+axes[1].set_title('Trayectorias Gillespie SSA vs determinista (Np)')
+axes[1].grid(True)
+axes[1].legend()
+
+# -------- Pu --------
+axes[2].plot(t, Pu, color='C2', label='Determinista Pu', linewidth=2)
+for j in range(n_ssa):
+    times_ssa, states_ssa = gillespie_ssa([10, 10, 10], tmax_sde, A, lambda_U, lambda_Np, B)
+    axes[2].step(times_ssa, states_ssa[2, :], where='post', color='C2', alpha=0.6)
+axes[2].set_xlabel('Tiempo (días)')
+axes[2].set_ylabel('Cantidad Pu')
+axes[2].set_xscale('log')
+axes[2].set_yscale('log')
+axes[2].set_title('Trayectorias Gillespie SSA vs determinista (Pu)')
+axes[2].grid(True)
+axes[2].legend()
+
+# Ajustes finales
 plt.tight_layout()
 plt.savefig('Taller_5/2.c.pdf', dpi=300)
+plt.close()
 
 
 
+"""
 # -------------------------------
 # Parte D: Probabilidad de concentración crítica (Pu >= 80) en 30 días
 # -------------------------------
@@ -574,7 +605,7 @@ for i in range(Nsim):
         k_ssa += 1
 
 p_ssa = k_ssa / Nsim
-se_ssa = np.sqrt(p_ssa * (1.0 - p_ssa) / Nsim).
+se_ssa = np.sqrt(p_ssa * (1.0 - p_ssa) / Nsim)
 ci_freq_ssa = (max(0.0, p_ssa - se_ssa), min(1.0, p_ssa + se_ssa))
 
 from scipy.stats import beta
@@ -632,3 +663,4 @@ print('2.d: Guardado 2.d.txt con resultados.')
 print(f'Gillespie: k={k_ssa}, p={p_ssa:.5f}, CI_freq=({ci_freq_ssa[0]:.5f},{ci_freq_ssa[1]:.5f}), CI_bayes=({ci_bayes_ssa[0]:.5f},{ci_bayes_ssa[1]:.5f})')
 print(f'SDE     : k={k_sde}, p={p_sde:.5f}, CI_freq=({ci_freq_sde[0]:.5f},{ci_freq_sde[1]:.5f}), CI_bayes=({ci_bayes_sde[0]:.5f},{ci_bayes_sde[1]:.5f})')
 
+"""
