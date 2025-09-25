@@ -51,16 +51,10 @@ def F_base(u, v):
 def G_base(u, v):
   return 10.0*(u - v)
 
-def F_bias(u, v, bias=-0.03):
-  return u - u*(v**3) - v + bias
-
-def G_bias(u, v, k=12.0):
-  return k*(u - v)
-
-def F_suave(u, v, c=0.9, d=0.04):
+def F_suave(u, v, c=1, d=0.05):
   return u - c*u*(v**2) - v - d
 
-def G_suave(u, v, k=8.0):
+def G_suave(u, v, k=10):
   return k*(u - v)
 
 # Visualización y guardado
@@ -129,6 +123,30 @@ if __name__ == "__main__":
 
 #  u, v, _ = imex(u0, v0, params, Lx=Lx, Ly=Ly, T=T_max, dt=dt)
 #  guardar_patron(u, "patrón_base", params, cmap='cividis', Lx=Lx, Ly=Ly)
+
+
+#  params = {
+#      'alpha': 0.00028, 'beta': 0.05,
+#      'F': lambda u, v: F_suave(u, v, c=10, d=0.05),
+#      'G': lambda u, v: G_suave(u, v, k=10),
+#      'F_text': "u - 10*u*v^2 - v - 0.05",
+#      'G_text': "10*(u - v)"
+#  }
+
+#  u, v, _ = imex(u0, v0, params, Lx=Lx, Ly=Ly, T=T_max, dt=dt)
+#  guardar_patron(u, "Bacterias", params, cmap='cividis', Lx=Lx, Ly=Ly)  
+
+
+#  params = {
+#      'alpha': 0.00028, 'beta': 0.05,
+#      'F': lambda u, v: F_suave(u, v, c=10, d=200),
+#      'G': lambda u, v: G_suave(u, v, k=10),
+#      'F_text': "u - 10*u*v^2 - v - 200",
+#      'G_text': "10*(u - v)"
+#  }
+
+#  u, v, _ = imex(u0, v0, params, Lx=Lx, Ly=Ly, T=T_max, dt=dt)
+#  guardar_patron(u, "cortina", params, cmap='cividis', Lx=Lx, Ly=Ly)  
 
 
 #--------------
