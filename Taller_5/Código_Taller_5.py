@@ -269,3 +269,96 @@ plt.tight_layout()
 plt.savefig("1.b.pdf")
 plt.show()
 
+# ------------------------------
+# 1.b)
+# ------------------------------
+
+import numpy as np
+import matplotlib.pyplot as plt
+from numba import njit
+import math
+
+# ------------------------------
+# Parámetros del sistema
+# ------------------------------
+N = 100            # tamaño de la red
+J = 1
+sweeps_eq = 500    # sweeps para equilibrar
+sweeps_meas = 1000 # sweeps para medir
+betas = np.linspace(0.1, 0.9, 80)  # rango de betas
+
+# Inicialización
+np.random.seed(42)
+espines = np.random.choice([-1, 1], size=(N, N))
+
+# ------------------------------
+# Funciones del modelo
+# ------------------------------
+@njit
+def energia_total(spins, N, J):
+    E = 0.0
+    for i in range(N):
+        for j in range(N):
+            s = spins[i, j]
+            E -= J * s * (spins[(i+1)%N, j] + spins[(i-1)%N, j] +
+                          spins[i, (j+1)%N] + spins[i, (j-1)%N])
+    return E/2.0   # cada enlace contado dos veces
+
+@njit
+def sweep(spins, N, J, beta, E, M):
+    for _ in range(N*N):
+        i = np.random.randint(0, N)
+        j = np.random.randint(0, N)
+        s = spins[i, j]
+        vecinos = spins[(i+1)%N, j] + spins[(i-1)%N, j] + spins[i, (j+1)%N] + spins[i, (j-1)%N]
+        dE = 2 * J * s * vecinos
+        if dE <= 0 or np.random.rand() < np.exp(-beta * dE):
+            spins[i, j] = -s
+            E += dE
+            M += 2 * spins[i, j]
+    return E, M
+
+@njit
+def run_metropolis(spins, N, J, beta, sweeps_eq, sweeps_meas):
+    E = energia_total(spins, N, J)
+    M = spins.sum()
+    
+    # equilibrar
+    for _ in range(sweeps_eq):
+        E, M = sweep(spins, N, J, beta, E, M)
+    
+    # medir
+    E_vals = np.empty(sweeps_meas)
+    for k in range(sweeps_meas):
+        E, M = sweep(spins, N, J, beta, E, M)
+        E_vals[k] = E / (N*N)   # energía por espín
+    
+    return spins, E_vals
+
+# ------------------------------
+# Simulación sobre varios betas
+# ------------------------------
+Cv_vals = []
+for beta in betas:
+    espines, E_vals = run_metropolis(espines, N, J, beta, sweeps_eq, sweeps_meas)
+    meanE = E_vals.mean()
+    meanE2 = (E_vals**2).mean()
+    # fórmula correcta con energía por espín
+    Cv = beta*2 * (meanE2 - meanE*2)
+    Cv_vals.append(Cv)
+
+# ------------------------------
+# Graficar
+# ------------------------------
+beta_c = 0.5 * math.log(1 + math.sqrt(2))
+
+plt.figure(figsize=(8,5))
+plt.plot(betas, Cv_vals, '-k')
+plt.axvline(beta_c, color='red', linestyle='--', label="Critical point (theory)")
+plt.xlabel("Thermodynamic β")
+plt.ylabel("Specific heat from simulation")
+plt.title(f"Specific heat vs β (N={N})")
+plt.legend()
+plt.tight_layout()
+plt.savefig("1.b.pdf")
+plt.show()
