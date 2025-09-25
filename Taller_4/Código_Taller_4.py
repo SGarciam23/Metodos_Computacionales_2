@@ -255,9 +255,6 @@ if __name__ == "__main__":
 #--------------
 # PUNTO 3
 #--------------
-#--------------
-# PUNTO 3
-#--------------
 
 import numpy as np
 import matplotlib.pyplot as plt
