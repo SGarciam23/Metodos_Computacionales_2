@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.integrate import solve_ivp
 
-"""
 N = 500          
 J = 1.0         
 beta = 0.5        
@@ -268,7 +267,7 @@ plt.title(f"Specific heat vs β (N={N})")
 plt.legend()
 plt.tight_layout()
 plt.savefig("1.b.pdf")
-plt.show()"""
+plt.show()
 
 
 
@@ -544,7 +543,6 @@ plt.close()
 
 
 
-"""
 # -------------------------------
 # Parte D: Probabilidad de concentración crítica (Pu >= 80) en 30 días
 # -------------------------------
@@ -662,5 +660,3 @@ with open('Taller_5/2.d.txt', 'w') as fh:
 print('2.d: Guardado 2.d.txt con resultados.')
 print(f'Gillespie: k={k_ssa}, p={p_ssa:.5f}, CI_freq=({ci_freq_ssa[0]:.5f},{ci_freq_ssa[1]:.5f}), CI_bayes=({ci_bayes_ssa[0]:.5f},{ci_bayes_ssa[1]:.5f})')
 print(f'SDE     : k={k_sde}, p={p_sde:.5f}, CI_freq=({ci_freq_sde[0]:.5f},{ci_freq_sde[1]:.5f}), CI_bayes=({ci_bayes_sde[0]:.5f},{ci_bayes_sde[1]:.5f})')
-
-"""
