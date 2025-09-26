@@ -87,7 +87,6 @@ plt.title("Espectros característicos por elemento del ánodo")
 plt.legend(fontsize=8)
 plt.tight_layout()
 plt.savefig("1.pdf", bbox_inches="tight", pad_inches=0.1)
-plt.show()
 
 #---------
 # PUNTO 2
@@ -183,8 +182,6 @@ for i, elem in enumerate(orden):
 
 plt.tight_layout()
 plt.savefig("2.a.pdf")
-plt.show()
-
 
 #opcion #2, 2b
 
@@ -279,7 +276,6 @@ for i, elem in enumerate(orden):
 
 plt.tight_layout()
 plt.savefig("2.b.pdf")
-plt.show()
 
 # 2.c
 
@@ -339,6 +335,10 @@ ax.legend()
 
 plt.tight_layout()
 plt.savefig("2.c.pdf")
+
+#---------
+# PUNTO 3
+#---------
 
 #3a
 
@@ -443,4 +443,3 @@ for i, elem in enumerate(orden):
 
 plt.tight_layout()
 plt.savefig("3.a.pdf")
-plt.show()
