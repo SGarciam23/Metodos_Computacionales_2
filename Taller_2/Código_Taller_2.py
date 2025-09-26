@@ -294,6 +294,31 @@ plt.tight_layout()
 plt.savefig("2.b.maxima.pdf")
 plt.close(
 
+num_peaks = len(peaks)
+
+
+time_span_years = df["decimal_date"].iloc[-1] - df["decimal_date"].iloc[0]
+time_span_days = time_span_years * 365.25
+
+
+if num_peaks > 0:
+    period_from_peak_counting_total = time_span_days / num_peaks
+    period_from_peak_counting_total_years = time_span_years / num_peaks
+
+
+    period_to_save = period_from_peak_counting_total 
+    period_to_save_years = period_from_peak_counting_total_years
+
+    
+    if not np.isnan(period_to_save):
+        with open("2.b.txt", "w") as f:
+            f.write(f"{period_to_save:.2f} días (~{period_to_save_years:.2f} años)\n")
+else:
+    
+    with open("2.b.txt", "w") as f:
+        f.write("Could not calculate period by dividing total time span by number of peaks: no peaks found.\n")
+
+
 #=========
 # PUNTO 3
 #=========
