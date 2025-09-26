@@ -63,6 +63,7 @@ plt.xlabel("Energía (keV)")
 plt.ylabel("Conteo de fotones (promedio ponderado)")
 plt.title("Espectros promediados en función de su energía")
 plt.legend()
+plt.savefig("1.a.pdf")
 plt.tight_layout()
 plt.show()
 #-----------------
