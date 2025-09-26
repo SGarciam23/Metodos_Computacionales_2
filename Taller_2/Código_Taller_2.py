@@ -248,7 +248,7 @@ freqs = freqs[mask]
 power = np.abs(Y[mask])**2
 
 # Limitar a ciclos entre 8 y 16 años (≈3000 a 6000 días)
-min_freq = 1/6000
+min_freq = 1/4500
 max_freq = 1/3000
 relevant_freqs_mask = (freqs >= min_freq) & (freqs <= max_freq)
 
