@@ -204,14 +204,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, peak_prominences
 from scipy.ndimage import gaussian_filter1d
 
 # 2.a. Arreglar datos
 
 # Cargar el archivo, ignorando comentarios (#) y usando el delimitador correcto (;)
 
-df = pd.read_csv("/SN_d_tot_V2.0.csv", sep=",", comment="#")
+df = pd.read_csv("/content/SN_d_tot_V2.0 (1).csv", sep=",", comment="#")
 
 # Columnas según SILSO (seleccionar las primeras 5 columnas)
 
@@ -273,10 +273,15 @@ plt.savefig("2.b.data.pdf")
 plt.close()
 
 # Máximos locales
-# distancia mínima entre máximos ~3000 días (~8 años)
-peaks, _ = find_peaks(filtered, distance=3000)
+# Adjust distance and prominence to capture more peaks
+# distance: decreased to capture closer peaks
+# prominence threshold: decreased to include less prominent peaks
+peaks, _ = find_peaks(filtered, distance=2000, prominence=10)
+
+
 peak_times = df["decimal_date"].iloc[peaks].values
 peak_values = filtered[peaks]
+
 
 plt.figure(figsize=(10,6))
 plt.scatter(peak_times, peak_values, color="red", label="Máximos locales")
@@ -287,10 +292,9 @@ plt.title("Máximos locales del ciclo solar")
 plt.legend()
 plt.tight_layout()
 plt.savefig("2.b.maxima.pdf")
-plt.close(
+plt.close()
 
 num_peaks = len(peaks)
-
 
 time_span_years = df["decimal_date"].iloc[-1] - df["decimal_date"].iloc[0]
 time_span_days = time_span_years * 365.25
@@ -301,19 +305,17 @@ if num_peaks > 0:
     period_from_peak_counting_total_years = time_span_years / num_peaks
 
 
-    period_to_save = period_from_peak_counting_total 
+    period_to_save = period_from_peak_counting_total
     period_to_save_years = period_from_peak_counting_total_years
 
-    
+
     if not np.isnan(period_to_save):
         with open("2.b.txt", "w") as f:
             f.write(f"{period_to_save:.2f} días (~{period_to_save_years:.2f} años)\n")
 else:
-    
+
     with open("2.b.txt", "w") as f:
         f.write("Could not calculate period by dividing total time span by number of peaks: no peaks found.\n")
-
-
 #=========
 # PUNTO 3
 #=========
