@@ -1,13 +1,14 @@
 import os 
 import numpy as np
 import matplotlib.pyplot as plt
+import re
+from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
+from scipy.optimize import curve_fit
 
 #---------
 # PUNTO 1
 #---------
-import os 
-import numpy as np
-import matplotlib.pyplot as plt
 
 # Ruta donde están las subcarpetas con los .dat
 ruta_base = r"C:\Users\usuario\OneDrive\Escritorio\Universidad\Materias\Metodos Computacionales 2\mammography_spectra"
@@ -94,12 +95,6 @@ plt.savefig("1.pdf", bbox_inches="tight", pad_inches=0.1)
 
 #Punto 2a, intento 2 
 
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from scipy.interpolate import interp1d
-
 # Ruta base donde están las carpetas W, Rh, Mo
 ruta_base = r"/content/mammography_spectra"
 
@@ -184,12 +179,6 @@ plt.tight_layout()
 plt.savefig("2.a.pdf")
 
 #opcion #2, 2b
-
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from scipy.interpolate import interp1d
 
 # Ruta base
 ruta_base = r"/content/mammography_spectra"
@@ -342,12 +331,6 @@ plt.savefig("2.c.pdf")
 
 #3a
 
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from scipy.interpolate import interp1d
-
 # Ruta base
 ruta_base = r"/content/mammography_spectra"
 
@@ -443,3 +426,5 @@ for i, elem in enumerate(orden):
 
 plt.tight_layout()
 plt.savefig("3.a.pdf")
+
+# 3.b
