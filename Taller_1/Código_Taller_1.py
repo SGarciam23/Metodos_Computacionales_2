@@ -428,3 +428,72 @@ plt.tight_layout()
 plt.savefig("3.a.pdf")
 
 # 3.b
+
+def gauss(x, A, mu, sigma):
+  return A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+
+resultados_ajuste = {"W": [], "Rh": [], "Mo": []}
+
+for elemento in orden:
+  for energia, residual, nombre in residuales[elemento]:
+    pidx, _ = find_peaks(residual, prominence=0.01 * np.max(residual))
+    if len(pidx) == 0:
+      continue
+    idx_max = pidx[np.argmax(residual[pidx])]
+    mu_est = energia[idx_max]
+    A_est = residual[idx_max]
+    sigma_est = 0.2
+
+    ventana = (energia > mu_est - 1.0) & (energia < mu_est + 1.0)
+    x_fit = energia[ventana]
+    y_fit = residual[ventana]
+
+    if len(x_fit) < 3 or np.max(y_fit) < 1e-3:
+      continue 
+
+    try:
+      popt, _ = curve_fit(gauss, x_fit, y_fit, p0=[A_est, mu_est, sigma_est], maxfev=5000)
+      A, mu, sigma = popt
+      fwhm = 2.355 * abs(sigma)
+    except Exception as e:
+      print(f"⚠️ Falló el ajuste en {nombre}: {e}")
+      continue
+
+    match = re.search(r"(\d+)\s*kV", nombre)
+    
+    if match:
+      voltaje = int(match.group(1))
+    else:
+      print(f"⚠️ No se pudo extraer voltaje de: {nombre}")
+      continue
+
+    resultados_ajuste[elemento].append((voltaje, A, fwhm))
+
+# --- Graficar resultados ---
+fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
+for elemento in orden:
+  datos = np.array(resultados_ajuste[elemento])
+  if len(datos) == 0:
+    continue
+
+  datos = datos[np.argsort(datos[:, 0])]
+  voltajes = datos[:, 0]
+  alturas = datos[:, 1]
+  fwhms = datos[:, 2]
+
+  axs[0].plot(voltajes, alturas, 'o-', label=titulos[elemento])
+  axs[1].plot(voltajes, fwhms, 's--', label=titulos[elemento])
+
+axs[0].set_title("Altura del pico vs Voltaje del tubo")
+axs[0].set_xlabel("Voltaje (kV)")
+axs[0].set_ylabel("Altura del pico (cuentas)")
+axs[0].legend()
+
+axs[1].set_title("Ancho a media altura (FWHM) vs Voltaje del tubo")
+axs[1].set_xlabel("Voltaje (kV)")
+axs[1].set_ylabel("FWHM (keV)")
+axs[1].legend()
+
+plt.tight_layout()
+plt.savefig("3.b.pdf")
