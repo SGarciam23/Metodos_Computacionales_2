@@ -2,6 +2,81 @@
 # PUNTO 1
 # ------------------------------
 
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+
+N = 250             # tamaño de la grilla
+J = 1.0             # constante de acoplamiento
+beta = 0.5         # 1/T (para 1.a enunciado)
+steps = 200000      # número de pasos totales (ajustable)
+frames = 300        # número de frames del video
+
+
+np.random.seed(42)
+spins = np.random.choice([-1, 1], size=(N, N))
+
+# Guardar estado inicial
+spins_initial = spins.copy()
+
+def energia_local(spins, i, j):
+    """ Calcula energía local de un espín con vecinos periódicos """
+    s = spins[i, j]
+    vecinos = (spins[(i+1)%N, j] + spins[(i-1)%N, j] +
+               spins[i, (j+1)%N] + spins[i, (j-1)%N])
+    return -J * s * vecinos
+
+
+def metropolis_step(spins):
+    i = np.random.randint(0, N)
+    j = np.random.randint(0, N)
+    s = spins[i, j]
+    vecinos = (spins[(i+1)%N, j] + spins[(i-1)%N, j] +
+               spins[i, (j+1)%N] + spins[i, (j-1)%N])
+    dE = 2 * J * s * vecinos
+    if dE <= 0 or np.random.rand() < np.exp(-beta * dE):
+        spins[i, j] *= -1
+
+fig, ax = plt.subplots(figsize=(6,6))
+im = ax.imshow(spins, cmap="coolwarm", interpolation="nearest")
+ax.set_title("Modelo de Ising 2D (250x250)")
+ax.axis("off")
+
+def update(frame):
+    # hacer varios pasos por frame para que evolucione más rápido
+    for _ in range(N*N // 100):
+        metropolis_step(spins)
+    im.set_data(spins)
+    return [im]
+
+ani = animation.FuncAnimation(fig, update, frames=frames, blit=True)
+ani.save("1a_video.mp4", writer="ffmpeg", fps=20)
+plt.close()
+
+# Guardar estado final
+spins_final = spins.copy()
+
+# Mostrar estado inicial
+plt.figure(figsize=(6,6))
+plt.imshow(spins_initial, cmap="coolwarm", interpolation="nearest")
+plt.title("Estado Inicial")
+plt.axis("off")
+plt.savefig("1a_estado_inicial.pdf")
+
+
+# Mostrar estado final
+plt.figure(figsize=(6,6))
+plt.imshow(spins_final, cmap="coolwarm", interpolation="nearest")
+plt.title("Estado Final")
+plt.axis("off")
+plt.savefig("1a_estado_final.pdf")
+
+
+# Display the video
+from IPython.display import Video
+Video("1a_video.mp4")
+
 # ------------------------------
 # 1.a) BONO 
 # ------------------------------
