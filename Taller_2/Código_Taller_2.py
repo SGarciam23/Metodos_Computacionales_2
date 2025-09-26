@@ -75,8 +75,6 @@ plt.legend()
 
 plt.tight_layout()
 plt.savefig("1.a.pdf")
-#plt.show()
-
 
 #1b
 def generar_senal(t, freq, SNtime):
@@ -125,7 +123,6 @@ plt.title("Relación SNfreq vs SNtime")
 plt.legend()
 plt.grid(True, which="both", ls="--", alpha=0.6)
 plt.savefig("1.b.pdf")
-#plt.show()
 
 print(f"Modelo encontrado: SNfreq ≈ (SNtime^{slope:.2f}) * {10**intercept:.2f}")
 
@@ -177,7 +174,6 @@ plt.title("Dependencia del ancho del pico en función de tmax")
 plt.grid(True)
 plt.legend()
 plt.savefig("1.c.pdf")
-#plt.show()
 
 #Bono
 def plot_aliasing(f_signal=50, duracion=0.1):
@@ -197,8 +193,7 @@ def plot_aliasing(f_signal=50, duracion=0.1):
     plt.suptitle("BONO: Aliasing al muestrear más allá de Nyquist", fontsize=14)
     plt.tight_layout()
     plt.savefig("BONO.pdf")
-    #plt.show()
-
+  
 plot_aliasing()
 
 #=========
@@ -480,7 +475,6 @@ plt.grid(True, alpha=0.4)
 plt.legend()
 plt.tight_layout()
 plt.savefig("4.pdf")
-#plt.show()
 
 #=========
 # PUNTO 5
