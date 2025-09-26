@@ -89,10 +89,11 @@ plt.tight_layout()
 plt.savefig("1.pdf", bbox_inches="tight", pad_inches=0.1)
 plt.show()
 
+#---------
+# PUNTO 2
+#---------
 
 #Punto 2a, intento 2 
-
-# punto 2
 
 import os
 import numpy as np
@@ -280,7 +281,64 @@ plt.tight_layout()
 plt.savefig("2.b.pdf")
 plt.show()
 
+# 2.c
 
+resultados_continuo = {"W": [], "Rh": [], "Mo": []}
+
+for elem in ejemplos_aprox_por_elemento:
+  for energia, conteo, continuo, nombre in ejemplos_aprox_por_elemento[elem]:
+    max_valor = np.max(continuo)
+    idx_max = np.argmax(continuo)
+    energia_max = energia[idx_max]
+    mitad = max_valor / 2
+    indices_arriba = np.where(continuo >= mitad)[0]
+    if len(indices_arriba) >= 2:
+      fwhm = energia[indices_arriba[-1]] - energia[indices_arriba[0]]
+    else:
+      fwhm = np.nan
+      
+    voltaje_match = re.search(r"(\d+)[kK]V", nombre)
+
+    if voltaje_match:
+      voltaje = int(voltaje_match.group(1))
+    else:
+      voltaje = np.nan
+
+    resultados_continuo[elem].append((voltaje, max_valor, energia_max, fwhm))
+
+# --- Graficar resultados ---
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+colores = {"W": "tab:blue", "Rh": "tab:green", "Mo": "tab:red"}
+
+for i, variable in enumerate(["Máximo", "Energía del máximo", "FWHM"]):
+  ax = axs[i // 2][i % 2]
+  for elem in resultados_continuo:
+    datos = np.array(resultados_continuo[elem])
+    if datos.size == 0:
+      continue
+    voltajes = datos[:, 0]
+    valores = datos[:, i + 1]
+  ax.plot(voltajes, valores, 'o-', label=elem, color=colores[elem])
+  ax.set_title(f"{variable} vs Voltaje del tubo")
+  ax.set_xlabel("Voltaje (kV)")
+  ax.set_ylabel(variable)
+  ax.legend()
+
+ax = axs[1][1]
+for elem in resultados_continuo:
+  datos = np.array(resultados_continuo[elem])
+  if datos.size == 0:
+    continue
+  energia_max = datos[:, 2]
+  max_valor = datos[:, 1]
+  ax.plot(energia_max, max_valor, 's-', label=elem, color=colores[elem])
+ax.set_title("Máximo del continuo vs Energía del máximo")
+ax.set_xlabel("Energía (keV)")
+ax.set_ylabel("Máximo del continuo")
+ax.legend()
+
+plt.tight_layout()
+plt.savefig("2.c.pdf")
 
 #3a
 
