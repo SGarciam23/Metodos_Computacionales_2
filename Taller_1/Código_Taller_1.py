@@ -1,4 +1,11 @@
-import os
+import os 
+import numpy as np
+import matplotlib.pyplot as plt
+
+#---------
+# PUNTO 1
+#---------
+import os 
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -7,14 +14,14 @@ ruta_base = r"C:\Users\usuario\OneDrive\Escritorio\Universidad\Materias\Metodos 
 
 plt.figure(figsize=(10, 6))
 
+# Diccionario para acumular datos por elemento
+datos_por_elemento = {"Mo": [], "Rh": [], "W": []}
+kv_por_elemento = {"Mo": [], "Rh": [], "W": []}  # para guardar voltajes
+
 # Recorrer cada subcarpeta (alta, media, baja energía)
 for subcarpeta in os.listdir(ruta_base):
     ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
     if os.path.isdir(ruta_subcarpeta):
-        energias_lista = []
-        conteos_lista = []
-
-        # Recorrer cada archivo .dat de la subcarpeta
         for archivo in os.listdir(ruta_subcarpeta):
             if archivo.endswith(".dat"):
                 ruta_archivo = os.path.join(ruta_subcarpeta, archivo)
@@ -29,42 +36,57 @@ for subcarpeta in os.listdir(ruta_base):
                     energia = datos[:, 0]
                     conteo = datos[:, 1]
 
-                    energias_lista.append(energia)
-                    conteos_lista.append(conteo)
+                    # Detectar a qué elemento pertenece
+                    if "Mo" in archivo:
+                        datos_por_elemento["Mo"].append((energia, conteo))
+                        kv = int("".join([c for c in archivo if c.isdigit()]))
+                        kv_por_elemento["Mo"].append(kv)
+                    elif "Rh" in archivo:
+                        datos_por_elemento["Rh"].append((energia, conteo))
+                        kv = int("".join([c for c in archivo if c.isdigit()]))
+                        kv_por_elemento["Rh"].append(kv)
+                    elif "W" in archivo:
+                        datos_por_elemento["W"].append((energia, conteo))
+                        kv = int("".join([c for c in archivo if c.isdigit()]))
+                        kv_por_elemento["W"].append(kv)
 
                 except Exception as e:
                     print(f"Error con {ruta_archivo}: {e}")
 
-        if not energias_lista:
-            continue
+# Graficar un espectro promedio para cada elemento con metadatos en el label
+for elemento, espectros in datos_por_elemento.items():
+    if espectros:
+        # Unir rangos y crear eje común
+        energia_min = min(e.min() for e, _ in espectros)
+        energia_max = max(e.max() for e, _ in espectros)
+        energia_comun = np.linspace(energia_min, energia_max, 800)
 
-        # 📌 Usar el rango más amplio posible
-        energia_min = min(energia.min() for energia in energias_lista)
-        energia_max = max(energia.max() for energia in energias_lista)
-        energia_comun = np.linspace(energia_min, energia_max, 800)  # más puntos para más detalle
-
-        # Interpolar todas las curvas al eje común (fuera de su rango -> NaN)
+        # Interpolar y promediar
         conteos_interp = []
-        for energia, conteo in zip(energias_lista, conteos_lista):
+        for energia, conteo in espectros:
             conteos_interp.append(np.interp(energia_comun, energia, conteo, left=np.nan, right=np.nan))
-
-        # Convertir a array y promediar ignorando NaN
         conteos_array = np.array(conteos_interp)
-        conteo_ponderado = np.nanmean(conteos_array, axis=0)
+        conteo_promedio = np.nanmean(conteos_array, axis=0)
 
-        # Graficar el promedio de la carpeta
-        plt.plot(energia_comun, conteo_ponderado, label=subcarpeta)
+        # Calcular valores representativos
+        conteo_max = np.nanmax(conteo_promedio)
+        kv_medio = np.mean(kv_por_elemento[elemento]) if kv_por_elemento[elemento] else np.nan
 
-        # Mostrar información
-        print(f"{subcarpeta} → Energía min: {energia_min:.2f} keV, max: {energia_max:.2f} keV")
+        # Label detallado estilo artículo científico
+        label = (f"{elemento} | Energía: {energia_min:.1f}-{energia_max:.1f} keV | "
+                 f"Vtubo ≈ {kv_medio:.0f} kV | "
+                 f"Conteo máx: {conteo_max:.0f}")
+
+        # Graficar solo 1 curva por elemento
+        plt.plot(energia_comun, conteo_promedio, label=label, linewidth=2)
 
 # Ajustes de la gráfica
 plt.xlabel("Energía (keV)")
-plt.ylabel("Conteo de fotones (promedio ponderado)")
-plt.title("Espectros promediados en función de su energía")
-plt.legend()
-plt.savefig("1.a.pdf")
+plt.ylabel("Conteo de fotones (promedio)")
+plt.title("Espectros característicos por elemento del ánodo")
+plt.legend(fontsize=8)
 plt.tight_layout()
+plt.savefig("1.pdf", bbox_inches="tight", pad_inches=0.1)
 plt.show()
 
 
