@@ -237,3 +237,73 @@ plt.legend()
 plt.tight_layout()
 plt.savefig(os.path.join(ruta_base, "2.c.pdf"))
 plt.show()
+
+
+#Punto 2a, intento 2 
+
+#punto 2
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+
+# Ruta base donde están las carpetas W, Rh, Mo
+ruta_base = r"/content/mammography_spectra"
+
+# Lista para guardar ejemplos
+ejemplos_remocion = []
+
+# Parámetro para puntos vecinos
+puntos_vecinos = 3
+
+
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if not os.path.isdir(ruta_subcarpeta):
+        continue
+
+    for archivo in os.listdir(ruta_subcarpeta):
+        if not archivo.endswith(".dat"):
+            continue
+
+        # Leer datos
+        # Specify the encoding as 'latin1' to handle the character encoding issue
+        try:
+            datos = np.loadtxt(os.path.join(ruta_subcarpeta, archivo), encoding='latin1')
+            energia, conteo = datos[:, 0], datos[:, 1]
+
+            # Detectar picos con umbral relativo
+            picos, _ = find_peaks(conteo, prominence=0.05 * np.max(conteo))
+
+            # Crear máscara para eliminar los picos y sus vecinos
+            mascara = np.ones_like(conteo, dtype=bool)
+            for p in picos:
+                ini = max(0, p - puntos_vecinos)
+                fin = min(len(conteo), p + puntos_vecinos + 1)
+                mascara[ini:fin] = False
+
+            energia_sin_picos = energia[mascara]
+            conteo_sin_picos = conteo[mascara]
+
+            # Guardar ejemplo
+            if len(ejemplos_remocion) < 3:
+                ejemplos_remocion.append((energia, conteo, energia_sin_picos, conteo_sin_picos, archivo))
+
+        except Exception as e:
+            print(f"Error processing {archivo}: {e}")
+
+
+# Graficar ejemplos
+plt.figure(figsize=(10, 6))
+for energia, conteo, e_sin, c_sin, nombre in ejemplos_remocion:
+    plt.plot(energia, conteo, label=f"{nombre} original", alpha=0.6)
+    plt.plot(e_sin, c_sin, 'o', markersize=3, label=f"{nombre} sin picos")
+
+plt.xlabel("Energía (keV)")
+plt.ylabel("Conteo de fotones")
+plt.title("Ejemplos de espectros con picos removidos")
+plt.legend()
+plt.tight_layout()
+plt.savefig("2.a.pdf")
+plt.show()
