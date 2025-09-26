@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 #---------
 
 # Ruta donde están las subcarpetas con los .dat
-ruta_base = r"C:\Users\usuario\OneDrive\Escritorio\Universidad\Materias\Metodos Computacionales 2\mammography_spectra"
+ruta_base = r"/content/mammography_spectra"
 
 plt.figure(figsize=(10, 6))
 
