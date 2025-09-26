@@ -241,27 +241,39 @@ plt.show()
 
 #Punto 2a, intento 2 
 
-#punto 2
+# punto 2
 
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
 
 # Ruta base donde están las carpetas W, Rh, Mo
 ruta_base = r"/content/mammography_spectra"
 
-# Lista para guardar ejemplos
-ejemplos_remocion = []
+# Diccionario para guardar ejemplos por elemento
+ejemplos_remocion_por_elemento = {"W": [], "Rh": [], "Mo": []}
 
 # Parámetro para puntos vecinos
 puntos_vecinos = 3
-
+prom_rel = 0.05 # Usar el mismo umbral relativo para detección de picos
 
 for subcarpeta in os.listdir(ruta_base):
     ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
     if not os.path.isdir(ruta_subcarpeta):
         continue
+
+    # Detectar elemento por nombre de carpeta
+    if "W" in subcarpeta and len(ejemplos_remocion_por_elemento["W"]) < 2:
+        elemento = "W"
+    elif "Rh" in subcarpeta and len(ejemplos_remocion_por_elemento["Rh"]) < 2:
+        elemento = "Rh"
+    elif "Mo" in subcarpeta and len(ejemplos_remocion_por_elemento["Mo"]) < 2:
+        elemento = "Mo"
+    else:
+        continue # Saltar si ya tenemos 2 ejemplos para este elemento o no es uno de los elementos principales
+
 
     for archivo in os.listdir(ruta_subcarpeta):
         if not archivo.endswith(".dat"):
@@ -274,7 +286,7 @@ for subcarpeta in os.listdir(ruta_base):
             energia, conteo = datos[:, 0], datos[:, 1]
 
             # Detectar picos con umbral relativo
-            picos, _ = find_peaks(conteo, prominence=0.05 * np.max(conteo))
+            picos, _ = find_peaks(conteo, prominence=prom_rel * np.max(conteo))
 
             # Crear máscara para eliminar los picos y sus vecinos
             mascara = np.ones_like(conteo, dtype=bool)
@@ -286,24 +298,133 @@ for subcarpeta in os.listdir(ruta_base):
             energia_sin_picos = energia[mascara]
             conteo_sin_picos = conteo[mascara]
 
-            # Guardar ejemplo
-            if len(ejemplos_remocion) < 3:
-                ejemplos_remocion.append((energia, conteo, energia_sin_picos, conteo_sin_picos, archivo))
+            # Guardar ejemplo si aún no tenemos 2 para este elemento
+            if len(ejemplos_remocion_por_elemento[elemento]) < 2:
+                 ejemplos_remocion_por_elemento[elemento].append((energia, conteo, energia_sin_picos, conteo_sin_picos, archivo))
+
 
         except Exception as e:
             print(f"Error processing {archivo}: {e}")
 
+# --- Graficar ejemplos por elemento ---
+fig, axs = plt.subplots(3, 1, figsize=(10, 12))
+orden = ["W", "Rh", "Mo"]
+titulos = {"W": "Tungsteno (W)", "Rh": "Rodio (Rh)", "Mo": "Molibdeno (Mo)"}
 
-# Graficar ejemplos
-plt.figure(figsize=(10, 6))
-for energia, conteo, e_sin, c_sin, nombre in ejemplos_remocion:
-    plt.plot(energia, conteo, label=f"{nombre} original", alpha=0.6)
-    plt.plot(e_sin, c_sin, 'o', markersize=3, label=f"{nombre} sin picos")
+for i, elem in enumerate(orden):
+    ax = axs[i]
+    if not ejemplos_remocion_por_elemento[elem]:
+        ax.set_title(f"{titulos[elem]} — sin ejemplos")
+        ax.set_xlabel("Energía (keV)")
+        ax.set_ylabel("Conteo de fotones")
+        continue
 
-plt.xlabel("Energía (keV)")
-plt.ylabel("Conteo de fotones")
-plt.title("Ejemplos de espectros con picos removidos")
-plt.legend()
+    for energia, conteo, e_sin, c_sin, nombre in ejemplos_remocion_por_elemento[elem]:
+        ax.plot(energia, conteo, alpha=0.6, label=f"{nombre} original")
+        ax.plot(e_sin, c_sin, 'o', markersize=3, label=f"{nombre} sin picos")
+
+    ax.set_title(f"Ejemplos de espectros con picos removidos — {titulos[elem]}")
+    ax.set_xlabel("Energía (keV)")
+    ax.set_ylabel("Conteo de fotones")
+    ax.legend(ncol=2, fontsize=8)
+
+
 plt.tight_layout()
 plt.savefig("2.a.pdf")
+plt.show()
+
+
+#opcion #2, 2b
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
+
+# Ruta base
+ruta_base = r"/content/mammography_spectra"
+
+# Diccionario para guardar ejemplos por elemento
+ejemplos_aprox_por_elemento = {"W": [], "Rh": [], "Mo": []}
+
+# Rango de puntos eliminados alrededor del pico
+puntos_vecinos = 3
+prom_rel = 0.05 # Usar el mismo umbral relativo para detección de picos
+
+
+for subcarpeta in os.listdir(ruta_base):
+    ruta_subcarpeta = os.path.join(ruta_base, subcarpeta)
+    if not os.path.isdir(ruta_subcarpeta):
+        continue
+
+    # Detectar elemento por nombre de carpeta
+    if "W" in subcarpeta and len(ejemplos_aprox_por_elemento["W"]) < 2:
+        elemento = "W"
+    elif "Rh" in subcarpeta and len(ejemplos_aprox_por_elemento["Rh"]) < 2:
+        elemento = "Rh"
+    elif "Mo" in subcarpeta and len(ejemplos_aprox_por_elemento["Mo"]) < 2:
+        elemento = "Mo"
+    else:
+        continue # Saltar si ya tenemos 2 ejemplos para este elemento o no es uno de los elementos principales
+
+
+    for archivo in os.listdir(ruta_subcarpeta):
+        if not archivo.endswith(".dat"):
+            continue
+
+        # Leer datos
+        # Specify the encoding as 'latin1' to handle the character encoding issue
+        try:
+            datos = np.loadtxt(os.path.join(ruta_subcarpeta, archivo), encoding='latin1')
+            energia, conteo = datos[:, 0], datos[:, 1]
+
+            # --- Limpiar picos ---
+            picos, _ = find_peaks(conteo, prominence=prom_rel * np.max(conteo))
+            mascara = np.ones_like(conteo, dtype=bool)
+            for p in picos:
+                ini = max(0, p - puntos_vecinos)
+                fin = min(len(conteo), p + puntos_vecinos + 1)
+                mascara[ini:fin] = False
+
+            energia_sin_picos = energia[mascara]
+            conteo_sin_picos = conteo[mascara]
+
+            # --- Aproximar continuo ---
+            kind_interp = "cubic" if len(energia_sin_picos) >= 4 else "linear"
+            interp_func = interp1d(energia_sin_picos, conteo_sin_picos, kind=kind_interp, fill_value="extrapolate")
+            continuo_aprox = interp_func(energia)
+
+
+            # Guardar dos ejemplos para graficar por elemento
+            if len(ejemplos_aprox_por_elemento[elemento]) < 2:
+                ejemplos_aprox_por_elemento[elemento].append((energia, conteo, continuo_aprox, archivo))
+
+        except Exception as e:
+            print(f"Error processing {archivo}: {e}")
+
+# --- Graficar ejemplos ---
+fig, axs = plt.subplots(3, 1, figsize=(10, 12))
+orden = ["W", "Rh", "Mo"]
+titulos = {"W": "Tungsteno (W)", "Rh": "Rodio (Rh)", "Mo": "Molibdeno (Mo)"}
+
+for i, elem in enumerate(orden):
+    ax = axs[i]
+    if not ejemplos_aprox_por_elemento[elem]:
+        ax.set_title(f"{titulos[elem]} — sin ejemplos")
+        ax.set_xlabel("Energía (keV)")
+        ax.set_ylabel("Conteo de fotones")
+        continue
+
+    for energia, conteo, continuo, nombre in ejemplos_aprox_por_elemento[elem]:
+        ax.plot(energia, conteo, alpha=0.5, label=f"{nombre} original")
+        ax.plot(energia, continuo, '--', label=f"{nombre} continuo aprox")
+
+    ax.set_title(f"Aproximación del continuo con picos eliminados — {titulos[elem]}")
+    ax.set_xlabel("Energía (keV)")
+    ax.set_ylabel("Conteo de fotones")
+    ax.legend(ncol=2, fontsize=8)
+
+plt.tight_layout()
+plt.savefig("2.b.pdf")
 plt.show()
