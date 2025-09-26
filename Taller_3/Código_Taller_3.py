@@ -266,34 +266,65 @@ solutions = angle_to_hit_target(20, 12, 0)
 print("Ángulos que pegan en (12,0) con v0=20 m/s:", np.degrees(solutions))
 
 # ======================================
-# 2.c Varias opciones (pares v0, theta)
+# 2.c
 # ======================================
-def find_solutions(target_x, target_y):
-    v0_vals = np.linspace(10, 140, 20)
-    theta_vals = np.linspace(0.01, np.pi/2 - 0.01, 50)
-    sols = []
-    for v0 in v0_vals:
-        for theta in theta_vals:
-            _, Y = simulate(v0, theta)
-            x_vals, y_vals = Y[0], Y[2]
-            dist = np.sqrt((x_vals - target_x)*2 + (y_vals - target_y)*2)
-            if np.min(dist) < 0.5:
-                sols.append((v0, theta))
-    return sols
+import numpy as np
+import matplotlib.pyplot as plt
 
+g = 9.8
+
+# --- funciones analíticas ---
+def get_angles(v0, target_x, target_y):
+    """
+    Devuelve las soluciones de theta (en radianes) para un tiro parabólico
+    con velocidad inicial v0 que pasa por (target_x, target_y).
+    Máximo 2 soluciones.
+    """
+    x, y = target_x, target_y
+    A = (g * x**2) / (2 * v0**2)
+    B = x
+    C = A + y
+
+    # Resolviendo tan(theta) de la fórmula general:
+    # y = x tanθ - (g x²) / (2 v0² cos²θ)
+    # -> es cuadrática en tanθ
+    a = A
+    b = -B
+    c = C
+
+    disc = b**2 - 4*a*c
+    if disc < 0:
+        return []
+    t1 = (-b + np.sqrt(disc)) / (2*a)
+    t2 = (-b - np.sqrt(disc)) / (2*a)
+    thetas = []
+    for t in (t1, t2):
+        if t > 0:  # ángulo físico
+            theta = np.arctan(t)
+            thetas.append(theta)
+    return thetas
+
+# --- parámetros ---
 target_x, target_y = 12, 0
-solutions_v0_theta = find_solutions(target_x, target_y)
+v0_vals = np.linspace(10, 140, 200)
 
-# Gráfica de soluciones
+# --- recolectar soluciones ---
+solutions = []
+for v0 in v0_vals:
+    thetas = get_angles(v0, target_x, target_y)
+    for theta in thetas:
+        solutions.append((v0, np.degrees(theta)))
+
+# --- graficar ---
 plt.figure(figsize=(8,5))
-for v0, theta in solutions_v0_theta:
-    plt.scatter(v0, np.degrees(theta), color="blue")
+for v0, theta_deg in solutions:
+    plt.scatter(v0, theta_deg, color="blue", s=10)
+
 plt.xlabel(r"$v_0$ (m/s)")
 plt.ylabel(r"$\theta_0$ (grados)")
 plt.title(f"Condiciones iniciales que dan en el blanco ({target_x},{target_y})")
 plt.grid()
-plt.savefig("2.c.pdf")
-plt.close()
+plt.savefig("2c.pdf")
 
 # -----------------------------
 # PUNTO 3
