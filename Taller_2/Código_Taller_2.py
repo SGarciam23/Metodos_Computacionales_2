@@ -441,40 +441,55 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from astropy.timeseries import LombScargle
 
-ruta = Path(r"C:\Users\usuario\OneDrive\Escritorio\Universidad\Materias\Metodos Computacionales 2\mammography_spectra\OGLE-LMC-CEP-0001.dat")
+ruta = Path(r"/content/OGLE-LMC-CEP-0001.dat")
 
-if not Path(ruta).exists():
+if not ruta.exists():
     raise FileNotFoundError(f"No encuentro el archivo en: {ruta}")
 
-# === 2) Leer datos: tiempo (t), magnitud (m), incertidumbre (dm)
 t, m, dm = np.loadtxt(ruta, unpack=True, comments="#")
 
-# === 3) Periodograma Lomb-Scargle (datos irregulares)
-# Rango razonable para una cefeida: 0.01–2 ciclos/día (ajustable)
+f = 1.0  # ciclos/día
+phi = np.mod(f * t, 1.0)
+
 min_freq = 0.01
 max_freq = 2.0
-freqs = np.linspace(min_freq, max_freq, 10000)
+freqs = np.linspace(min_freq, max_freq, 20000)
 
 ls = LombScargle(t, m, dm)
 power = ls.power(freqs)
 
-best_freq = freqs[np.argmax(power)]
-best_period = 1.0 / best_freq
+mejor_freq = freqs[np.argmax(power)]
+mejor_periodo = 1.0 / mejor_freq
+mejor_phi = np.mod(mejor_freq * t, 1.0)
 
-print(f"Frecuencia dominante: {best_freq:.6f} ciclos/día")
-print(f"Período correspondiente: {best_period:.6f} días")
+print("=== Resultados ===")
+print(f"Frecuencia fija (ejercicio): {f:.3f} ciclos/día")
+print(f"Frecuencia dominante (Lomb–Scargle): {mejor_freq:.6f} ciclos/día")
+print(f"Período correspondiente: {mejor_periodo:.6f} días")
 
-# === 4) Calcular fase y graficar brillo vs fase
-phi = np.mod(best_freq * t, 1.0)
+# Graficar
 
-plt.figure(figsize=(7,5))
-plt.errorbar(phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
-plt.gca().invert_yaxis()  # magnitud: menor = más brillante
-plt.xlabel("Fase (ϕ)")
-plt.ylabel("Magnitud")
-plt.title(f"Brillo vs fase  |  f = {best_freq:.6f} c/d,  P = {best_period:.3f} d")
-plt.grid(True, alpha=0.4)
-plt.legend()
+fig, axes = plt.subplots(1, 2, figsize=(12,5), sharey=True)
+
+# Gráfico frecuencia dada
+
+axes[0].errorbar(phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
+axes[0].invert_yaxis()
+axes[0].set_xlabel("Fase (ϕ)")
+axes[0].set_ylabel("Magnitud")
+axes[0].set_title("f = 1 ciclo/día (ejercicio)")
+axes[0].grid(True, alpha=0.4)
+axes[0].legend()
+
+# Gráfico frecuencia real
+
+axes[1].errorbar(mejor_phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
+axes[1].invert_yaxis()
+axes[1].set_xlabel("Fase (ϕ)")
+axes[1].set_title(f"f óptima = {mejor_freq:.4f} c/d\nP = {mejor_periodo:.3f} d")
+axes[1].grid(True, alpha=0.4)
+axes[1].legend()
+
 plt.tight_layout()
 plt.savefig("4.pdf")
 
