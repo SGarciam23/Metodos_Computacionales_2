@@ -323,7 +323,7 @@ def get_angles(v0, target_x, target_y):
 
 # --- parámetros ---
 target_x, target_y = 12, 0
-v0_vals = np.linspace(10, 140, 200)
+v0_vals = np.linspace(10, 140, 2400)
 
 # --- recolectar soluciones ---
 solutions = []
@@ -342,7 +342,6 @@ plt.ylabel(r"$\theta_0$ (grados)")
 plt.title(f"Condiciones iniciales que dan en el blanco ({target_x},{target_y})")
 plt.grid()
 plt.savefig("2c.pdf")
-
 # -----------------------------
 # PUNTO 3
 # -----------------------------
