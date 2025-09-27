@@ -266,40 +266,70 @@ solutions = angle_to_hit_target(20, 12, 0)
 print("Ángulos que pegan en (12,0) con v0=20 m/s:", np.degrees(solutions))
 
 # ======================================
-# 2.c Varias opciones (pares v0, theta)
+# 2.c
 # ======================================
-def find_solutions(target_x, target_y):
-    v0_vals = np.linspace(10, 140, 20)
-    theta_vals = np.linspace(0.01, np.pi/2 - 0.01, 50)
-    sols = []
-    for v0 in v0_vals:
-        for theta in theta_vals:
-            _, Y = simulate(v0, theta)
-            x_vals, y_vals = Y[0], Y[2]
-            dist = np.sqrt((x_vals - target_x)*2 + (y_vals - target_y)*2)
-            if np.min(dist) < 0.5:
-                sols.append((v0, theta))
-    return sols
+import numpy as np
+import matplotlib.pyplot as plt
 
+g = 9.8
+
+# --- funciones analíticas ---
+def get_angles(v0, target_x, target_y):
+    """
+    Devuelve las soluciones de theta (en radianes) para un tiro parabólico
+    con velocidad inicial v0 que pasa por (target_x, target_y).
+    Máximo 2 soluciones.
+    """
+    x, y = target_x, target_y
+    A = (g * x**2) / (2 * v0**2)
+    B = x
+    C = A + y
+
+    # Resolviendo tan(theta) de la fórmula general:
+    # y = x tanθ - (g x²) / (2 v0² cos²θ)
+    # -> es cuadrática en tanθ
+    a = A
+    b = -B
+    c = C
+
+    disc = b**2 - 4*a*c
+    if disc < 0:
+        return []
+    t1 = (-b + np.sqrt(disc)) / (2*a)
+    t2 = (-b - np.sqrt(disc)) / (2*a)
+    thetas = []
+    for t in (t1, t2):
+        if t > 0:  # ángulo físico
+            theta = np.arctan(t)
+            thetas.append(theta)
+    return thetas
+
+# --- parámetros ---
 target_x, target_y = 12, 0
-solutions_v0_theta = find_solutions(target_x, target_y)
+v0_vals = np.linspace(10, 140, 200)
 
-# Gráfica de soluciones
+# --- recolectar soluciones ---
+solutions = []
+for v0 in v0_vals:
+    thetas = get_angles(v0, target_x, target_y)
+    for theta in thetas:
+        solutions.append((v0, np.degrees(theta)))
+
+# --- graficar ---
 plt.figure(figsize=(8,5))
-for v0, theta in solutions_v0_theta:
-    plt.scatter(v0, np.degrees(theta), color="blue")
+for v0, theta_deg in solutions:
+    plt.scatter(v0, theta_deg, color="blue", s=10)
+
 plt.xlabel(r"$v_0$ (m/s)")
 plt.ylabel(r"$\theta_0$ (grados)")
 plt.title(f"Condiciones iniciales que dan en el blanco ({target_x},{target_y})")
 plt.grid()
-plt.savefig("2.c.pdf")
-plt.close()
+plt.savefig("2c.pdf")
 
 # -----------------------------
 # PUNTO 3
 # -----------------------------
-# Código optimizado — manteniendo el mismo método (shooting + solve_ivp + brentq)
-# Cambios: memoización, prints de monitoreo, paralelización opcional, menor ngrid por defecto.
+
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -307,64 +337,48 @@ from scipy.integrate import solve_ivp
 from scipy import integrate
 from scipy.optimize import brentq
 from functools import lru_cache
-import concurrent.futures
-import os
 
 # -----------------------------
-# Parámetros (usar los indicados)
+# Parámetros
 # -----------------------------
 hbar = 0.1
 m = 1.0
 a = 0.8
 x0 = 10.0
 
-# dominio global para buscar raíces de V(x)-E
-XMIN_GLOBAL = x0 - 8.0
-XMAX_GLOBAL = x0 + 12.0
+XMIN_GLOBAL = 0.0
+XMAX_GLOBAL = 20.0
 
-# paso espacial máximo pedido
 DX = 0.01
 MAX_STEP = 0.01
 
-# condición inicial mejorada
+# valores por defecto (se usan si no hay región prohibida)
 PSI_INIT = 1e-6
+PSI_DERIV_INIT = 1e-6
 
-# -----------------------------
-# Opciones de optimización
-# -----------------------------
-# Cuántos trabajadores para el escaneo paralelo. 1 = sin paralelizar.
-# Ajuste según CPU; por defecto usa todos los CPUs disponibles.
-N_WORKERS = max(1, os.cpu_count() or 1)
-
-# Cada cuántas energías imprime progreso (cuando no está paralelizado)
+N_WORKERS = 1
 PROGRESS_EVERY = 500
 
 # -----------------------------
 # Potencial de Morse
 # -----------------------------
 def V(x):
-    return (1.0 - np.exp(-a * (x0 - x)))**2 - 1.0
+    return (1.0 - np.exp(a * (x - x0)))**2 - 1.0
 
 # -----------------------------
 # Ecuaciones de Schrödinger
-# y' = f(x,y;E) con y=[psi, psi']
 # -----------------------------
 def schrodinger(x, y, E):
     psi, phi = y
     dpsi = phi
-    dphi = (2.0 * m / hbar**2) * (V(x) - E) * psi
+    dphi = (V(x) - E) * psi / (hbar**2)
     return [dpsi, dphi]
 
 # -----------------------------
-# Encontrar puntos de giro
-# Uso de cache para energías muy similares (redondeadas)
+# Puntos de giro
 # -----------------------------
 @lru_cache(maxsize=1024)
-def turning_points_cached(E_key, xmin=XMIN_GLOBAL, xmax=XMAX_GLOBAL, ngrid=5000):
-    """
-    E_key: entero que representa E*1e12 (clave cacheable).
-    Esta función es la versión cacheable; se llama dentro de turning_points().
-    """
+def turning_points_cached(E_key, xmin=XMIN_GLOBAL, xmax=XMAX_GLOBAL, ngrid=2000):
     E = E_key / 1e12
     xs = np.linspace(xmin, xmax, ngrid)
     f = V(xs) - E
@@ -377,48 +391,51 @@ def turning_points_cached(E_key, xmin=XMIN_GLOBAL, xmax=XMAX_GLOBAL, ngrid=5000)
             roots.append(root)
         except Exception:
             pass
-    # deduplicate y redondeo a 10 decimales para estabilidad
-    roots = np.array(sorted(list(set([round(r,10) for r in roots]))))
-    return tuple(roots.tolist())
+    roots = sorted(set([round(r,10) for r in roots]))
+    return tuple(roots)
 
-def turning_points(E, xmin=XMIN_GLOBAL, xmax=XMAX_GLOBAL, ngrid=5000):
-    # redondeo para clave de cache
+def turning_points(E, xmin=XMIN_GLOBAL, xmax=XMAX_GLOBAL, ngrid=2000):
     E_key = int(round(E * 1e12))
     return list(turning_points_cached(E_key, xmin, xmax, ngrid))
 
 # -----------------------------
-# Integrar ODE para energía dada
+# Integración con condiciones de frontera suaves
 # -----------------------------
 def integrate_for_energy(E, x_left, x_right, dx=DX):
-    # Creamos el grid de evaluación con paso dx
     x_eval = np.arange(x_left, x_right + dx, dx)
-    y0 = [PSI_INIT, 0.0] # psi' = 0.0 en el punto de retorno (igual que en su versión)
+
+    # condiciones iniciales desde decaimiento exponencial
+    Vleft = V(x_left)
+    if Vleft > E:
+        kappa = np.sqrt(2 * m * (Vleft - E)) / hbar
+        psi0 = np.exp(-kappa * (turning_points(E)[0] - x_left))
+        dpsi0 = kappa * psi0
+    else:
+        psi0, dpsi0 = PSI_INIT, PSI_DERIV_INIT
+
+    y0 = [psi0, dpsi0]
+
     sol = solve_ivp(fun=schrodinger, t_span=(x_eval[0], x_eval[-1]), y0=y0,
                     t_eval=x_eval, args=(E,), max_step=MAX_STEP, method='RK45')
     return sol.t, sol.y[0]
 
 # -----------------------------
-# Función para shooting (cacheada)
+# Shooting
 # -----------------------------
-@lru_cache(maxsize=4096)
+@lru_cache(maxsize=8192)
 def psi_at_right_cached(E_key):
-    """
-    E_key es E*1e12 (entero). Retorna psi_right (float) o np.nan
-    """
     E = E_key / 1e12
     tps = turning_points(E)
     if len(tps) < 2:
         return np.nan
+
     x1, x2 = tps[0], tps[1]
-    # empiezo ligeramente después del turning point izquierdo para evitar singularidades
-    xL = x1 - 0.02
-    xR = x2 + 0.02
+    xL = x1 - 2.0
+    xR = x2 + 0.5
+
     try:
         xs, psi = integrate_for_energy(E, xL, xR)
-        # si psi[0] es 0 (numéricamente improbable con PSI_INIT), devolver nan
-        if abs(psi[0]) < 1e-16:
-            return np.nan
-        psi = psi / psi[0]
+        psi = psi / psi[0]  # normalización relativa
         return float(psi[-1])
     except Exception:
         return np.nan
@@ -428,36 +445,26 @@ def psi_at_right(E):
     return psi_at_right_cached(E_key)
 
 # -----------------------------
-# Escaneo de energías (paralelizable)
+# Escaneo de energías
 # -----------------------------
 def compute_psi_vals(E_scan, parallel_workers=1):
     start = time.perf_counter()
-    print(f"[INFO] Iniciando escaneo de {len(E_scan)} energías. Workers = {parallel_workers}")
-    psi_vals = None
-    if parallel_workers is not None and parallel_workers > 1:
-        # Paraleliza usando procesos (cada proceso invocará la misma lógica)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=parallel_workers) as ex:
-            # map garantiza orden de salida igual al orden de entrada
-            futures = list(ex.map(psi_at_right, E_scan))
-            psi_vals = np.array(list(futures), dtype=float)
-    else:
-        # secuencial con prints de progreso
-        psi_list = []
-        for i, E in enumerate(E_scan):
-            if (i % PROGRESS_EVERY) == 0:
-                elapsed = time.perf_counter() - start
-                print(f"[PROGRESS] E index {i}/{len(E_scan)} — E={E:.6g} — elapsed {elapsed:.2f}s")
-            psi_list.append(psi_at_right(E))
-        psi_vals = np.array(psi_list, dtype=float)
-    total = time.perf_counter() - start
-    print(f"[INFO] Escaneo completo en {total:.2f} s")
+    print(f"[INFO] Iniciando escaneo de {len(E_scan)} energías...")
+    psi_list = []
+    for i, E in enumerate(E_scan):
+        if (i % PROGRESS_EVERY) == 0:
+            elapsed = time.perf_counter() - start
+            print(f"[PROGRESS] E index {i}/{len(E_scan)} — E={E:.6g} — elapsed {elapsed:.2f}s")
+        psi_list.append(psi_at_right(E))
+    psi_vals = np.array(psi_list, dtype=float)
+    print(f"[INFO] Escaneo completo en {time.perf_counter()-start:.2f} s")
     return psi_vals
 
 # -----------------------------
-# Búsqueda de autovalores (ceros de psi_at_right)
+# Localizar autovalores
 # -----------------------------
 def find_bound_states(E_scan, psi_vals):
-    print("[INFO] Buscando cambios de signo para localizar intervalos candidatos...")
+    print("[INFO] Buscando autovalores...")
     found_energies = []
     for i in range(len(E_scan) - 1):
         f1, f2 = psi_vals[i], psi_vals[i+1]
@@ -466,18 +473,14 @@ def find_bound_states(E_scan, psi_vals):
         if f1 * f2 < 0:
             E_low, E_high = E_scan[i], E_scan[i+1]
             try:
-                # brentq llamará a psi_at_right que está cacheada
-                root = brentq(lambda EE: psi_at_right(EE), E_low, E_high, xtol=1e-8, maxiter=50)
-                if not any(abs(root - E0) < 1e-6 for E0 in found_energies):
+                root = brentq(lambda EE: psi_at_right(EE), E_low, E_high, xtol=1e-8, maxiter=60)
+                if not any(abs(root - E0) < 1e-7 for E0 in found_energies):
                     found_energies.append(root)
-                    print(f"[ROOT] Encontrado autovalor E = {root:.10f} en intervalo [{E_low:.6g}, {E_high:.6g}]")
+                    print(f"[ROOT] E = {root:.10f}")
             except Exception as exc:
-                # no fallamos el programa, solo saltamos
-                print(f"[WARN] brentq falló en intervalo [{E_low:.6g}, {E_high:.6g}]: {exc}")
+                print(f"[WARN] brentq falló en [{E_low},{E_high}]: {exc}")
                 pass
-    found_energies = sorted(found_energies)
-    print(f"[INFO] Total autovalores encontrados: {len(found_energies)}")
-    return found_energies
+    return sorted(found_energies)
 
 # -----------------------------
 # Rutina principal
@@ -485,106 +488,76 @@ def find_bound_states(E_scan, psi_vals):
 def main():
     total_start = time.perf_counter()
 
-    # Escaneo grueso (puede ajustar número de puntos)
-    # REDUCIMOS ENERGIAS DE 20000 A 1000 PARA UNA VERIFICACIÓN MÁS FACIL
     E_SCAN = np.linspace(-0.9999, -0.001, 1000)
-
-    # Compute psi values (paralelo opcional)
     psi_vals = compute_psi_vals(E_SCAN, parallel_workers=N_WORKERS)
-
-    # Encontrar estados a partir de cambios de signo
     found_energies = find_bound_states(E_SCAN, psi_vals)
 
-    # Integrar y normalizar cada estado encontrado (sin paralelizar por simplicidad)
+    # Guardar energías en archivo TXT
+    with open("energias.txt", "w") as f:
+        for n, E in enumerate(found_energies):
+            f.write(f"n={n}, E={E:.10f}\n")
+    print("[INFO] Energías guardadas en energias.txt")
+
     states = []
-    print("[INFO] Integrando y normalizando cada estado encontrado...")
+    print("[INFO] Integrando y normalizando cada estado...")
     for E in found_energies:
         tps = turning_points(E)
         if len(tps) < 2:
             continue
         x1, x2 = tps[0], tps[1]
-        
-        # Corrección: Integrar SÓLO dentro de los puntos de retorno
-        xL = x1 - 0.02
-        xR = x2 + 0.02
+        xL = x1 - 2.0
+        xR = x2 + 0.5
         xs, psi = integrate_for_energy(E, xL, xR)
 
         norm = np.sqrt(integrate.simpson(psi**2, xs))
         if norm == 0 or np.isnan(norm):
-            print(f"[WARN] Norm problem for E={E:.10f}: norm={norm}")
             continue
-
         psi_n = psi / norm
-        states.append({'E': E, 'x': xs, 'psi': psi_n, 'x1': x1, 'x2': x2})
-        print(f"[STATE] Estado E={E:.10f} integrado y normalizado (len(xs)={len(xs)})")
+        states.append({'E': E, 'x': xs, 'psi': psi_n})
+        print(f"[STATE] E={E:.10f} normalizado")
 
-    # Plots (igual que su version)
-    x_global = np.linspace(XMIN_GLOBAL, XMAX_GLOBAL, 4000)
+    # Plot final
+    x_global = np.linspace(XMIN_GLOBAL, XMAX_GLOBAL, 3000)
     V_global = V(x_global)
 
-    plt.figure(figsize=(10,6))
-    plt.plot(x_global, V_global, linewidth=1.2, label="Potencial de Morse")
+    plt.figure(figsize=(9,6))
+    plt.plot(x_global, V_global, 'k', lw=1.2, label="Potencial de Morse")
 
-    amp = 0.02
-    colors = plt.cm.viridis(np.linspace(0,1,len(states)))
+    amp = 0.05
+    colors = plt.cm.viridis(np.linspace(0,1,max(1,len(states))))
 
     for n, st in enumerate(states):
         E = st['E']
         xs = st['x']
         psi = st['psi']
-        
-        # Para que no se vea una línea recta, usamos el dominio completo para el ploteo
-        # pero rellenamos con ceros fuera del rango de integración
-        x_plot = np.linspace(XMIN_GLOBAL, XMAX_GLOBAL, 1000)
+
+        x_plot = np.linspace(XMIN_GLOBAL, XMAX_GLOBAL, 1200)
         psi_plot = np.zeros_like(x_plot)
-        
-        # Encontramos los índices correspondientes a los puntos de retorno para ploteo
         idx_start = np.searchsorted(x_plot, xs[0])
         idx_end = np.searchsorted(x_plot, xs[-1])
-        
-        # Interpolamos la psi calculada en el grid de ploteo
         psi_interpolated = np.interp(x_plot[idx_start:idx_end], xs, psi)
         psi_plot[idx_start:idx_end] = psi_interpolated
-        
-        plt.plot(x_plot, psi_plot*amp + E, lw=1, color=colors[n], label=f"n={n}")
+
+        plt.plot(x_plot, psi_plot*amp + E, color=colors[n], lw=1.2, label=f"n={n}")
         plt.hlines(E, xs[0], xs[-1], colors="gray", linestyles='--', lw=0.6)
 
     plt.xlabel("x")
     plt.ylabel("Energía")
-    plt.title("Estados ligados en el potencial de Morse (corregido)")
+    plt.title("Estados ligados en el potencial de Morse")
     plt.ylim(-1.2, 0.2)
     plt.xlim(XMIN_GLOBAL, XMAX_GLOBAL)
     plt.legend()
     plt.grid(alpha=0.3)
-    plt.show()
 
-    '''# Gráfica de la función de shooting (opcional)
-    E_SCAN_SHOOTING = np.linspace(-1.0, -0.01, 2000)
-    psi_vals_shooting = compute_psi_vals(E_SCAN_SHOOTING, parallel_workers=1)  # para la gráfica, uso secuencial
-    plt.figure(figsize=(7,5))
-    plt.plot(E_SCAN_SHOOTING, psi_vals_shooting, "-")
-    plt.axhline(0, color="black", lw=0.8)
-    plt.xlabel("Energía")
-    plt.ylabel("psi_at_right(E)")
-    plt.title("Función de shooting para localizar autovalores")
-    # límites adaptativos si hay valores grandes
-    finite_vals = psi_vals_shooting[np.isfinite(psi_vals_shooting)]
-    if finite_vals.size > 0:
-        vmin, vmax = np.percentile(finite_vals, [1,99])
-        rng = max(1.0, max(abs(vmin), abs(vmax)))
-        plt.ylim(-rng, rng)
-    else:
-        plt.ylim(-5,5)
-    plt.grid(True, alpha=0.3)
-    plt.show()'''
+    # Guardar la gráfica como PDF
+    plt.savefig("morse_estados.pdf")
+    print("[INFO] Gráfica guardada en morse_estados.pdf")
 
-    total_end = time.perf_counter()
-    print(f"[DONE] Tiempo total (script): {total_end - total_start:.2f} s")
+    print(f"[DONE] Tiempo total: {time.perf_counter() - total_start:.2f} s")
 
 if __name__ == "__main__":
-    print("[START] Ejecutando script optimizado para shooting + solve_ivp")
-    print(f"[CONFIG] N_WORKERS={N_WORKERS}, DX={DX}, MAX_STEP={MAX_STEP}")
     main()
+
 
 # -----------------------------
 # PUNTO 4
