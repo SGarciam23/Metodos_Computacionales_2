@@ -179,71 +179,88 @@ if __name__ == "__main__":
 # PUNTO 2
 # -----------------------------
 
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.integrate import solve_ivp
+# ======================
+# 2.a Alcance máximo vs v0
+# ======================
+g = 9.773          # gravedad en Bogotá (m/s^2)
+m = 10.01          # masa del proyectil (kg)
 
-# ======================================
-# Constantes del problema
-# ======================================
-g = 9.773   # Gravedad en Bogotá (m/s^2)
-m = 10      # Masa del proyectil (kg)
-
-# Parámetros empíricos de β(y)
+# Coeficiente de fricción dependiente de la altura
 A, B, C = 1.642, 40.624, 2.36
 
-# ======================================
-# Definición de β(y) coeficiente de resistencia del aire
-# ======================================
 def beta_y(y):
-    return A * (1 - y / B) ** C if y < B else 0.0
+    """Coeficiente de fricción dependiente de la altura."""
+    return A * (1 - y / B)**C if y < B else 0.0
 
-# ======================================
+# ============================================================
 # Ecuaciones de movimiento
-# ======================================
+# ============================================================
 def equations(t, Y):
     x, vx, y, vy = Y
-    v = np.sqrt(vx*2 + vy*2)
+    v = np.sqrt(vx**2 + vy**2)            # magnitud de la velocidad
     beta = beta_y(y)
     ax = -beta * v * vx / m
-    ay = -g - (beta * v * vy / m)
+    ay = -g - beta * v * vy / m
     return [vx, ax, vy, ay]
 
-# ======================================
-# Evento: detener integración al tocar el suelo
-# ======================================
 def hit_ground(t, Y):
+    """Evento: el proyectil toca el suelo."""
     return Y[2]
 hit_ground.terminal = True
 hit_ground.direction = -1
 
-# ======================================
-# Simulación de trayectoria
-# ======================================
 def simulate(v0, theta):
+    """Integra la trayectoria del proyectil."""
     v0x, v0y = v0 * np.cos(theta), v0 * np.sin(theta)
     Y0 = [0, v0x, 0, v0y]
-    sol = solve_ivp(equations, [0, 100], Y0,
-                    method="RK45", max_step=0.01,
-                    events=hit_ground)
+    sol = solve_ivp(equations, [0, 200], Y0,
+                    events=hit_ground,
+                    max_step=0.01)
     return sol.t, sol.y
 
-# ======================================
-# 2.a Alcance máximo vs v0 (con θ = 45°)
-# ======================================
-v0_values = np.linspace(10, 140, 30)
-ranges = []
-for v0 in v0_values:
-    _, Y = simulate(v0, np.pi/4)
-    ranges.append(Y[0, -1])
+# ============================================================
+# 2.a Alcance máximo vs v0  (buscando el ángulo óptimo)
+# ============================================================
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
 
+v0_values = np.linspace(10, 140, 30)              # velocidades iniciales
+theta_scan = np.linspace(np.deg2rad(10), np.deg2rad(80), 100)
+
+ranges = []      # alcances máximos
+opt_angles = []  # ángulos óptimos
+
+for v0 in v0_values:
+    best_range = -1
+    best_theta = None
+    for theta in theta_scan:
+        _, Y = simulate(v0, theta)
+        x_final = Y[0, -1]
+        if x_final > best_range:
+            best_range = x_final
+            best_theta = theta
+    ranges.append(best_range)
+    opt_angles.append(np.degrees(best_theta))
+
+# Gráfica de alcance máximo
 plt.figure(figsize=(8,5))
-plt.plot(v0_values, ranges, marker="o")
+plt.plot(v0_values, ranges, marker='o')
 plt.xlabel(r"$v_0$ (m/s)")
 plt.ylabel(r"$x_{max}$ (m)")
-plt.title("Alcance máximo vs $v_0$ con $\\theta=45°$")
+plt.title("2.a Alcance máximo vs $v_0$ (ángulo óptimo)")
 plt.grid()
 plt.savefig("2.a.pdf")
+plt.close()
+
+# (Opcional) Gráfica del ángulo óptimo
+plt.figure(figsize=(8,5))
+plt.plot(v0_values, opt_angles, marker='s', color='red')
+plt.xlabel(r"$v_0$ (m/s)")
+plt.ylabel(r"Ángulo óptimo (°)")
+plt.title("Ángulo óptimo para máximo alcance")
+plt.grid()
+plt.savefig("2.a_opt_angle.pdf")
 plt.close()
 
 # ======================================
