@@ -268,7 +268,7 @@ plt.title(f"Specific heat vs β (N={N})")
 plt.legend()
 plt.tight_layout()
 plt.savefig("1.b.pdf")
-plt.show()
+#plt.show()
 
 
 
@@ -372,70 +372,113 @@ plt.savefig('Taller_5/2.a.pdf', dpi=300)
 # Parte B: Ecuación diferencial estocástica SOLO para U(t) (RK2 estocástico)
 # -------------------------------
 
-#PUNTO 2.B
-def RK2_U (A, lambdau, U_0, T, dt, n_traj):
-    #numero de pasos
-    n_steps = int(T/dt)
-    #arreglo para la cantidad de Uranio
-    U = np.zeros((n_traj, n_steps))
-    #Arrays de tiempos
-    t = np.linspace(0, T, n_steps+1)
-    #Array de trayectorias en cero
-    traj = np.zeros((n_traj, n_steps+1))
-    #valor inicial
-    U[:, 0] = U_0
-    #Función mu y sigma_mu
-    mu = lambda U: A - lambdau * U 
-    sigmamu = lambda U: np.sqrt(np.maximum(A + lambdau*U,0.0))
-    #simulación de las trayectorias
-    #Iniciar una nueva trayectoria
-    for j in  range(n_traj):
-        U = U_0
-        #simular trajectoria
+###2.b
+def RK2_sistema(A, lambdaU, lambdaNp, B, U0, Np0, Pu0, T, dt, n_traj):
+    n_steps = int(T / dt)
+    t = np.linspace(0, T, n_steps + 1)
+
+    # Arrays para las trayectorias
+    traj_U = np.zeros((n_traj, n_steps + 1))
+    traj_Np = np.zeros((n_traj, n_steps + 1))
+    traj_Pu = np.zeros((n_traj, n_steps + 1))
+
+    # Condiciones iniciales
+    traj_U[:, 0] = U0
+    traj_Np[:, 0] = Np0
+    traj_Pu[:, 0] = Pu0
+
+    # Definimos drift y volatilidad para cada ecuación
+    mu_U = lambda U: A - lambdaU * U
+    mu_Np = lambda U, Np: lambdaU * U - lambdaNp * Np
+    mu_Pu = lambda Np, Pu: lambdaNp * Np - B * Pu
+
+    sigma_U = lambda U: np.sqrt(np.maximum(A + lambdaU * U, 0.0))
+    sigma_Np = lambda U, Np: np.sqrt(np.maximum(lambdaU * U + lambdaNp * Np, 0.0))
+    sigma_Pu = lambda Np, Pu: np.sqrt(np.maximum(lambdaNp * Np + B * Pu, 0.0))
+
+    for j in range(n_traj):
+        U = U0
+        Np = Np0
+        Pu = Pu0
         for n in range(n_steps):
-            #valores de ruido
-            W = np.random.normal(0.0, 1.0)
-            S = np.random.choice([-1, 1])
-            Noise = (W-S) * np.sqrt(dt)
-            NNoise = (W+S) * np.sqrt(dt)
-            #K1
-            K_1 = dt * mu(U) + sigmamu(U) * Noise
-            #K2
-            K_2 = dt * mu(U + K_1) + NNoise * sigmamu(U + K_1)
-            #Actualizar U para el siguiente paso
-            U = U + 0.5 * (K_1 + K_2)
+            # Ruido aleatorio para cada variable
+            W_U, W_Np, W_Pu = np.random.normal(0, 1, 3)
+            S_U, S_Np, S_Pu = np.random.choice([-1, 1], 3)
 
-            #Guardar el valor de U
-            traj[j, n+1] = U
-    return t, traj
-    
+            # ---- U ----
+            K1_U = dt * mu_U(U) + sigma_U(U) * (W_U - S_U) * np.sqrt(dt)
+            K2_U = dt * mu_U(U + K1_U) + sigma_U(U + K1_U) * (W_U + S_U) * np.sqrt(dt)
+            U = U + 0.5 * (K1_U + K2_U)
 
-#simular
-#prueba 1
-A=1000
-lambdaU = np.log(2)/0.01625
-U_0 = 10
-#numero de dias
+            # ---- Np ----
+            K1_Np = dt * mu_Np(U, Np) + sigma_Np(U, Np) * (W_Np - S_Np) * np.sqrt(dt)
+            K2_Np = dt * mu_Np(U, Np + K1_Np) + sigma_Np(U, Np + K1_Np) * (W_Np + S_Np) * np.sqrt(dt)
+            Np = Np + 0.5 * (K1_Np + K2_Np)
+
+            # ---- Pu ----
+            K1_Pu = dt * mu_Pu(Np, Pu) + sigma_Pu(Np, Pu) * (W_Pu - S_Pu) * np.sqrt(dt)
+            K2_Pu = dt * mu_Pu(Np, Pu + K1_Pu) + sigma_Pu(Np, Pu + K1_Pu) * (W_Pu + S_Pu) * np.sqrt(dt)
+            Pu = Pu + 0.5 * (K1_Pu + K2_Pu)
+
+            # Guardar valores
+            traj_U[j, n + 1] = U
+            traj_Np[j, n + 1] = Np
+            traj_Pu[j, n + 1] = Pu
+
+    return t, traj_U, traj_Np, traj_Pu
+
+# ---- Simulación ----
+A = 1000
+lambdaU = 42.65521111138125
+lambdaNp = 0.29001974082006077
+B = 20
+U0 = Np0 = Pu0 = 10
 T = 30
-#Longitud del paso
-dt = 0.0001
-#trayectorias a simular
+dt = 0.01
 n_traj = 5
-tiempos, trayectorias = RK2_U(A, lambdaU, U_0, T, dt, n_traj)
 
-plt.figure(figsize=(8,5))
-plt.plot(tiempos, trayectorias[0], label='U ruta 1')
-plt.plot(tiempos, trayectorias[1], label='U ruta 2')
-plt.plot(tiempos, trayectorias[2], label='U ruta 3')
-plt.plot(tiempos, trayectorias[3], label='U ruta 4')
-plt.plot(tiempos, trayectorias[4], label='U ruta 5')
-plt.plot(sol.t, sol.y[0], label='U sin ruido', color=
-'black', linewidth=2)
-plt.legend()
-plt.title('Trayectoria de Uranio con A=1000')
-plt.yscale('log')
-plt.xscale('log')
-plt.savefig('Taller_5/2.b.pdf')
+t, traj_U, traj_Np, traj_Pu = RK2_sistema(A, lambdaU, lambdaNp, B, U0, Np0, Pu0, T, dt, n_traj)
+
+
+
+# ---- Graficar en subplots ----
+fig, axs = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+
+# ---- U ----
+for j in range(n_traj):
+    axs[0].plot(t, traj_U[j], alpha=0.7, label=f'U traj {j+1}')
+axs[0].plot(sol.t, sol.y[0], color='black', linewidth=2, label='U sin ruido')
+axs[0].set_ylabel("Cantidad U")
+axs[0].set_yscale('log')
+axs[0].set_xscale('log')
+axs[0].set_title("Evolución estocástica de U")
+axs[0].legend()
+
+# ---- Np ----
+for j in range(n_traj):
+    axs[1].plot(t, traj_Np[j], alpha=0.7, label=f'Np traj {j+1}')
+axs[1].plot(sol.t, sol.y[1], color='red', linewidth=2, label='Np sin ruido')
+axs[1].set_ylabel("Cantidad Np")
+axs[1].set_yscale('log')
+axs[1].set_xscale('log')
+axs[1].set_title("Evolución estocástica de Np")
+axs[1].legend()
+
+# ---- Pu ----
+for j in range(n_traj):
+    axs[2].plot(t, traj_Pu[j], alpha=0.7, label=f'Pu traj {j+1}')
+axs[2].plot(sol.t, sol.y[2], color='blue', linewidth=2, label='Pu sin ruido')
+axs[2].set_xlabel("Tiempo")
+axs[2].set_ylabel("Cantidad Pu")
+axs[2].set_yscale('log')
+axs[2].set_xscale('log')
+axs[2].set_title("Evolución estocástica de Pu")
+axs[2].legend()
+
+plt.tight_layout()
+plt.savefig('Taller_5/2.b.pdf', dpi=300)
+#plt.show()
+
 
 
 #-------------------------------
@@ -687,5 +730,3 @@ with open("Taller_5/2.d.txt","w") as f:
     f.write(f"  IC Bayes 95%: [{ci_gill[0]*100:.2f}%, {ci_gill[1]*100:.2f}%]\n")
     f.write("\nDiscusión: Las tres simulaciones dan probabilidades consistentes.\n")
     f.write("El intervalo Bayesiano es más estable cerca de probabilidades extremas.\n")
-
-
