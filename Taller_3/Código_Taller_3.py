@@ -580,64 +580,77 @@ if __name__ == "__main__":
 # -----------------------------
 
 import numpy as np
-from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
-# Parámetros
-alpha = 1.0   # mg/kl
-t_max = 1e4
+m, l = 1.0, 1.0
+k = 20.0
 
-# Condiciones iniciales
-r0 = 1.0
+alpha_values = np.linspace(1.0, 1.2, 20)
+
+r0 = l
 theta0 = np.pi / 2
 dr0 = 0.0
 dtheta0 = 0.0
-y0 = [r0, dr0, theta0, dtheta0]
+Pr0 = m * dr0
+Ptheta0 = m * r0**2 * dtheta0
 
-# Ecuaciones de movimiento
-def elastic_pendulum(t, y):
-  r, dr, theta, dtheta = y
-  d2r = r * dtheta**2 - alpha * (r - 1)
-  d2theta = - (2 * dr * dtheta) / r - np.sin(theta) / r
-  return [dr, d2r, dtheta, d2theta]
+t_max = 5000.0
+dt = 0.05
+n_steps = int(t_max / dt)
 
-# Evento: cruce por el eje vertical hacia abajo (y < 0)
-def crossing_event(t, y):
-  r, dr, theta, dtheta = y
-  return np.cos(theta)  # cruce cuando cos(theta) = 0
+def wrap_angle(theta):
+  return (theta + np.pi) % (2*np.pi) - np.pi
 
-crossing_event.terminal = False
-crossing_event.direction = 0  # solo cuando pasa hacia abajo
+def rhs(y, g):
+  """Ecuaciones canónicas para (r, theta, Pr, Ptheta)."""
+  r, theta, Pr, Ptheta = y
+  r_safe = max(r, 1e-8)
+  drdt = Pr / m
+  dthetadt = Ptheta / (m * r_safe**2)
+  dPrdt = (Ptheta**2) / (m * r_safe**3) - k * (r - l) + m * g * np.cos(theta)
+  dPthetadt = -m * g * r * np.sin(theta)
+  return np.array([drdt, dthetadt, dPrdt, dPthetadt])
 
-# Integración
-sol = solve_ivp(
-    elastic_pendulum,
-    [0, t_max],
-    y0,
-    method='DOP853',
-    max_step=0.1,
-    events=crossing_event
-)
+def rk4_step(y, dt, g):
+  k1 = rhs(y, g)
+  k2 = rhs(y + 0.5*dt*k1, g)
+  k3 = rhs(y + 0.5*dt*k2, g)
+  k4 = rhs(y + dt*k3, g)
+  return y + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
 
-# Extraer puntos de Poincaré
-r_vals = []
-Pr_vals = []  # P_r = dr
+all_r, all_Pr = [], []
 
-for state in sol.y_events[0]:
-  r, dr, theta, dtheta = state
-  if np.cos(theta) > 0: # y < 0
-    r_vals.append(r)
-    Pr_vals.append(dr)
+for alpha in alpha_values:
+  g = alpha * l / m 
+  y = np.array([r0, theta0, Pr0, Ptheta0], dtype=float)
+  theta_prev = wrap_angle(y[1])
 
-# Graficar P_r vs r y guardar en PDF
+  for _ in range(n_steps):
+    y_new = rk4_step(y, dt, g)
+    theta_curr = wrap_angle(y_new[1])
+    dtheta_curr = y_new[3] / (m * max(y_new[0], 1e-8)**2)
+
+    if (theta_prev < 0.0) and (theta_curr >= 0.0) and (dtheta_curr > 0.0):
+      dth = theta_curr - theta_prev
+      s = -theta_prev / (dth + 1e-12)
+      s = np.clip(s, 0.0, 1.0)
+      r_cross = y[0] + s * (y_new[0] - y[0])
+      Pr_cross = y[2] + s * (y_new[2] - y[2])
+
+      all_r.append(r_cross)
+      all_Pr.append(Pr_cross)
+
+    y, theta_prev = y_new, theta_curr
+
+# Graficar
 plt.figure(figsize=(6, 6))
-plt.scatter(r_vals, Pr_vals, s=2, color='blue')
+plt.scatter(all_r, all_Pr, s=2, color='blue', alpha=0.7)
 plt.xlabel(r"$r$")
 plt.ylabel(r"$P_r$")
-plt.title("Diagrama de Poincaré: $P_r$ vs $r$")
+plt.title(r"Diagrama de Poincaré: $P_r$ vs $r$ para $\alpha \in [1, 1.2]$")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("4.pdf")  # Guarda en PDF
+plt.savefig("4.pdf")
 plt.close()
 
 # -----------------------------
