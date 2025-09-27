@@ -1,11 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numba import njit
-from scipy.signal import peak_widths
+from scipy.signal import peak_widths, find_peaks
 from scipy.optimize import curve_fit
-from scipy.fft import fft, fftfreq
+from scipy.fft import fft, fftfreq, fft2, ifft2, fftshift, ifftshift
 from scipy.stats import linregress
 from numpy.typing import NDArray
+from PIL import Image
+import pandas as pd
+from pathlib import Path
+from astropy.timeseries import LombScargle
+from scipy import ndimage as ndi
+from numpy.fft import rfft, irfft, rfftfreq
+from scipy.ndimage import gaussian_filter1d # Keep gaussian_filter1d as it's used elsewhere
+# Removed peak_local_max import
+from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
+from skimage.feature import peak_local_max
+
+
+
+
+
+
 
 #=========
 # PUNTO 1
@@ -84,7 +100,7 @@ def generar_senal(t, freq, SNtime):
     return signal + noise, signal, noise
 
 def calcular_SNfreq(t, y, freq, f_eval):
-    Y = Fourier(t, y, f_eval)
+    Y = Fourier_transform(t, y, f_eval) # Corrected function name
     P = np.abs(Y)
     peak = np.max(P)
     mask = (f_eval < freq*0.8) | (f_eval > freq*1.2)
@@ -158,7 +174,7 @@ A = 1.0
 freq = 5.0
 dt = 0.01
 SNtime = 0.5
-tmax_values = np.linspace(-30, 15, 30)  # ⬅ empieza en 0.5 en lugar de 0
+tmax_values = np.linspace(0.5, 15, 30)  # Adjusted start to 0.5
 fwhm_values = []
 
 for tmax in tmax_values:
@@ -193,25 +209,18 @@ def plot_aliasing(f_signal=50, duracion=0.1):
     plt.suptitle("BONO: Aliasing al muestrear más allá de Nyquist", fontsize=14)
     plt.tight_layout()
     plt.savefig("BONO.pdf")
-  
+
 plot_aliasing()
 
 #=========
 # PUNTO 2
 #=========
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy.fft import fft, fftfreq
-from scipy.signal import find_peaks, peak_prominences
-from scipy.ndimage import gaussian_filter1d
-
 # 2.a. Arreglar datos
 
 # Cargar el archivo, ignorando comentarios (#) y usando el delimitador correcto (;)
 
-df = pd.read_csv("/content/SN_d_tot_V2.0 (1).csv", sep=",", comment="#")
+df = pd.read_csv("/content/SN_d_tot_V2.0 (2).csv", sep=",", comment="#") # Corrected filename
 
 # Columnas según SILSO (seleccionar las primeras 5 columnas)
 
@@ -242,8 +251,8 @@ mask = freqs > 0
 freqs = freqs[mask]
 power = np.abs(Y[mask])**2
 
-# Limitar a ciclos entre 8 y 16 años (≈3000 a 6000 días)
-min_freq = 1/4500
+# Limitar a ciclos entre 8 y 16 años (~3000 a 6000 días)
+min_freq = 1/6000
 max_freq = 1/3000
 relevant_freqs_mask = (freqs >= min_freq) & (freqs <= max_freq)
 
@@ -257,7 +266,7 @@ period_days = 1 / f_peak
 
 # Guardar en archivo de texto
 with open("2.b.txt", "w") as f:
-    f.write(f"{period_days:.2f} días (~{period_days/365:.2f} años)\n")
+    f.write(f"{period_days:.2f} días (~{period_days/365.25:.2f} años)\n")
 
 # Filtrado pasa bajas
 filtered = gaussian_filter1d(y, sigma=500)
@@ -300,9 +309,9 @@ time_span_years = df["decimal_date"].iloc[-1] - df["decimal_date"].iloc[0]
 time_span_days = time_span_years * 365.25
 
 
-if num_peaks > 0:
-    period_from_peak_counting_total = time_span_days / num_peaks
-    period_from_peak_counting_total_years = time_span_years / num_peaks
+if num_peaks > 1: # Changed from num_peaks > 0 to num_peaks > 1 to avoid division by zero or single peak case
+    period_from_peak_counting_total = time_span_days / (num_peaks -1) # Corrected to divide by number of intervals
+    period_from_peak_counting_total_years = time_span_years / (num_peaks - 1) # Corrected to divide by number of intervals
 
 
     period_to_save = period_from_peak_counting_total
@@ -310,19 +319,22 @@ if num_peaks > 0:
 
 
     if not np.isnan(period_to_save):
-        with open("2.b.txt", "w") as f:
-            f.write(f"{period_to_save:.2f} días (~{period_to_save_years:.2f} años)\n")
+        with open("2.b.txt", "a") as f: # Changed to append mode to keep the FFT period
+            f.write(f"Periodo (conteo de picos): {period_to_save:.2f} días (~{period_to_save_years:.2f} años)\n")
 else:
 
-    with open("2.b.txt", "w") as f:
-        f.write("Could not calculate period by dividing total time span by number of peaks: no peaks found.\n")
+    with open("2.b.txt", "a") as f: # Changed to append mode
+        f.write("Could not calculate period by dividing total time span by number of intervals between peaks: less than 2 peaks found.\n")
+
 #=========
 # PUNTO 3
 #=========
 
 #3.a.
-def desenfoque_gaussiano(imagen_path, A):
-  imagen = np.array(Image.open(imagen_path).convert("RGB"), dtype=float)
+def desenfoque_gaussiano(imagen_path, A, output_path="3.a.jpg"):
+  # Use full path to the image
+  full_image_path = os.path.join(os.getcwd(), imagen_path)
+  imagen = np.array(Image.open(full_image_path).convert("RGB"), dtype=float)
   imagen_borrosa = np.zeros_like(imagen)
 
   for c in range(3):
@@ -343,94 +355,163 @@ def desenfoque_gaussiano(imagen_path, A):
     # Transformada inversa
     imagen_borrosa[:, :, c] = np.abs(ifft2(ifftshift(F_filtrado)))
 
-  Image.fromarray(np.uint8(imagen_borrosa)).save("3.a.jpg")
+  Image.fromarray(np.uint8(imagen_borrosa)).save(output_path)
 
-desenfoque_gaussiano("miette.jpg", 20)
+desenfoque_gaussiano("miette.jpg", 20, "3.a.jpg")
 
 #3.b.a.
 
-def eliminar_ruido_periodico(ruta_imagen_entrada, percentil=99.9, radio=3):
-  imagen = Image.open(ruta_imagen_entrada).convert('L')
-  imagen_array = np.array(imagen, dtype=float)
-
-  F = fft2(imagen_array)
-  F_shift = fftshift(F)
-  magnitud = np.abs(F_shift)
-  mag_log = np.log1p(magnitud)
-
-  filas, columnas = imagen_array.shape
-  centro = (filas // 2, columnas // 2)
-  umbral = np.percentile(mag_log, percentil)
-  coords = peak_local_max(
-      mag_log,
-      min_distance=10,
-      threshold_abs=umbral,
-      exclude_border=False
-  )
-
-  coords_filtradas = [
-      (int(y), int(x)) for y, x in coords
-      if (abs(y - centro[0]) > 5 or abs(x - centro[1]) > 5)
-  ]
-
-  for (y, x) in coords_filtradas:
-    for dy in range(-radio, radio + 1):
-      for dx in range(-radio, radio + 1):
-        yy = (y + dy) % filas
-        xx = (x + dx) % columnas
-        sy = (2 * centro[0] - yy) % filas
-        sx = (2 * centro[1] - xx) % columnas
-        F_shift[yy, xx] = 0
-        F_shift[sy, sx] = 0
 
 
-  F_ishift = ifftshift(F_shift)
-  imagen_sin_ruido = np.abs(ifft2(F_ishift))
+def eliminar_ruido_periodico(ruta_imagen_entrada, percentil=99.9, radio=5, output_path="3.b.a.jpg"):
+    # Cargar la imagen en escala de grises
+    imagen = Image.open(ruta_imagen_entrada).convert('L')
+    imagen_array = np.array(imagen, dtype=float)
 
-  imagen_norm = 255 * (imagen_sin_ruido - imagen_sin_ruido.min()) / np.ptp(imagen_sin_ruido)
-  imagen_norm = np.uint8(imagen_norm)
+    # FFT 2D y desplazamiento al centro
+    F = fft2(imagen_array)
+    F_shift = fftshift(F)
+    magnitud = np.abs(F_shift)
+    mag_log = np.log1p(magnitud)
+
+    filas, columnas = imagen_array.shape
+    centro = (filas // 2, columnas // 2)
+
+    # Determinar el umbral para los picos brillantes (ruido periódico)
+    umbral = np.percentile(mag_log, percentil)
+
+    # Buscar picos locales en el espectro
+    coords = peak_local_max(
+        mag_log,
+        min_distance=10,          # distancia mínima entre picos
+        threshold_abs=umbral      # umbral
+    )
+
+    # Filtrar picos cercanos al centro (DC component)
+    coords_filtradas = [
+        (y, x) for y, x in coords
+        if np.hypot(y - centro[0], x - centro[1]) > 10
+    ]
+
+    # Suprimir los picos (y su simétrico)
+    for (y, x) in coords_filtradas:
+        for dy in range(-radio, radio + 1):
+            for dx in range(-radio, radio + 1):
+                yy = (y + dy) % filas
+                xx = (x + dx) % columnas
+                # punto simétrico conjugado
+                sy = (2 * centro[0] - yy) % filas
+                sx = (2 * centro[1] - xx) % columnas
+
+                F_shift[yy, xx] = 0
+                F_shift[sy, sx] = 0
+
+    # Transformada inversa
+    F_ishift = ifftshift(F_shift)
+    imagen_sin_ruido = np.abs(ifft2(F_ishift))
+
+    # Normalización
+    imagen_norm = 255 * (imagen_sin_ruido - imagen_sin_ruido.min()) / np.ptp(imagen_sin_ruido)
+    imagen_norm = np.uint8(imagen_norm)
+
+    # Guardar resultado
+    Image.fromarray(imagen_norm).save(output_path)
+    print(f"Imagen procesada guardada en: {output_path}")
+
+    # Mostrar antes/después
+    plt.figure(figsize=(12,6))
+    plt.subplot(1,2,1)
+    plt.imshow(imagen_array, cmap='gray')
+    plt.title("Imagen original con ruido")
+    plt.axis('off')
+
+    plt.subplot(1,2,2)
+    plt.imshow(imagen_norm, cmap='gray')
+    plt.title("Imagen filtrada (ruido periódico eliminado)")
+    plt.axis('off')
+
+    plt.show()
 
 
-  Image.fromarray(imagen_norm).save("3.b.a.jpg")
-
-eliminar_ruido_periodico("p_a_t_o.jpg", percentil=99.9, radio=5)
+# Ejecutar
+eliminar_ruido_periodico("/content/p_a_t_o.jpg", percentil=99.9, radio=11, output_path="3.b.a.jpg")
 
 #3.b.b.
 
-def detectar_picos(fft_magnitud, umbral):
-  h, w = fft_magnitud.shape
-  cy, cx = h // 2, w // 2
-  coords = []
-  for y in range(h):
-    for x in range(w):
-      if abs(y - cy) < 5 and abs(x - cx) < 5:
-        continue  # no tocar la componente DC
-      if fft_magnitud[y, x] > umbral:
-        coords.append((y, x))
-  return coords
 
-def eliminar_ruido_gato(imagen_path, factor_umbral):
-  imagen = np.array(Image.open(imagen_path).convert("L"), dtype=float)
-  F = fft2(imagen)
-  F_shift = fftshift(F)
-  magnitud_log = np.log1p(np.abs(F_shift))
 
-  umbral = magnitud_log.mean() * factor_umbral
-  picos = detectar_picos(magnitud_log, umbral)
+def eliminar_ruido_periodico(ruta_imagen_entrada, percentil=99.9, radio=5, output_path="3.b.b.png"):
+    # Cargar la imagen en escala de grises
+    imagen = Image.open(ruta_imagen_entrada).convert('L')
+    imagen_array = np.array(imagen, dtype=float)
 
-  h, w = imagen.shape
-  cy, cx = h // 2, w // 2
-  for (y, x) in picos:
-    F_shift[y, x] = 0
-    sy = (2*cy - y) % h
-    sx = (2*cx - x) % w
-    F_shift[sy, sx] = 0
+    # FFT 2D y desplazamiento al centro
+    F = fft2(imagen_array)
+    F_shift = fftshift(F)
+    magnitud = np.abs(F_shift)
+    mag_log = np.log1p(magnitud)
 
-  imagen_sin_ruido = np.abs(ifft2(ifftshift(F_shift)))
-  imagen_sin_ruido = np.clip(imagen_sin_ruido, 0, 255)
-  Image.fromarray(np.uint8(imagen_sin_ruido)).save("3.b.b.png")
+    filas, columnas = imagen_array.shape
+    centro = (filas // 2, columnas // 2)
 
-eliminar_ruido_gato("g_a_t_o.png", 5)
+    # Determinar el umbral para los picos brillantes (ruido periódico)
+    umbral = np.percentile(mag_log, percentil)
+
+    # Buscar picos locales en el espectro
+    coords = peak_local_max(
+        mag_log,
+        min_distance=10,          # distancia mínima entre picos
+        threshold_abs=umbral      # umbral
+    )
+
+    # Filtrar picos cercanos al centro (DC component)
+    coords_filtradas = [
+        (y, x) for y, x in coords
+        if np.hypot(y - centro[0], x - centro[1]) > 10
+    ]
+
+    # Suprimir los picos (y su simétrico)
+    for (y, x) in coords_filtradas:
+        for dy in range(-radio, radio + 1):
+            for dx in range(-radio, radio + 1):
+                yy = (y + dy) % filas
+                xx = (x + dx) % columnas
+                # punto simétrico conjugado
+                sy = (2 * centro[0] - yy) % filas
+                sx = (2 * centro[1] - xx) % columnas
+
+                F_shift[yy, xx] = 0
+                F_shift[sy, sx] = 0
+
+    # Transformada inversa
+    F_ishift = ifftshift(F_shift)
+    imagen_sin_ruido = np.abs(ifft2(F_ishift))
+
+    # Normalización
+    imagen_norm = 255 * (imagen_sin_ruido - imagen_sin_ruido.min()) / np.ptp(imagen_sin_ruido)
+    imagen_norm = np.uint8(imagen_norm)
+
+    # Guardar resultado
+    Image.fromarray(imagen_norm).save(output_path)
+    print(f"Imagen procesada guardada en: {output_path}")
+
+    # Mostrar antes/después
+    plt.figure(figsize=(12,6))
+    plt.subplot(1,2,1)
+    plt.imshow(imagen_array, cmap='gray')
+    plt.title("Imagen original con ruido")
+    plt.axis('off')
+
+    plt.subplot(1,2,2)
+    plt.imshow(imagen_norm, cmap='gray')
+    plt.title("Imagen filtrada (ruido periódico eliminado)")
+    plt.axis('off')
+
+    plt.show()
+
+
+# Ejecutar
+eliminar_ruido_periodico("/content/g_a_t_o.png", percentil=99.9, radio=7, output_path="3.b.b.png")
 
 #=========
 # PUNTO 4
@@ -467,45 +548,14 @@ print(f"Frecuencia fija (ejercicio): {f:.3f} ciclos/día")
 print(f"Frecuencia dominante (Lomb–Scargle): {mejor_freq:.6f} ciclos/día")
 print(f"Período correspondiente: {mejor_periodo:.6f} días")
 
-# Graficar
-
-fig, axes = plt.subplots(1, 2, figsize=(12,5), sharey=True)
-
-# Gráfico frecuencia dada
-
-axes[0].errorbar(phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
-axes[0].invert_yaxis()
-axes[0].set_xlabel("Fase (ϕ)")
-axes[0].set_ylabel("Magnitud")
-axes[0].set_title("f = 1 ciclo/día (ejercicio)")
-axes[0].grid(True, alpha=0.4)
-axes[0].legend()
-
-# Gráfico frecuencia real
-
-axes[1].errorbar(mejor_phi, m, yerr=dm, fmt='.', ms=4, alpha=0.8, label="Datos")
-axes[1].invert_yaxis()
-axes[1].set_xlabel("Fase (ϕ)")
-axes[1].set_title(f"f óptima = {mejor_freq:.4f} c/d\nP = {mejor_periodo:.3f} d")
-axes[1].grid(True, alpha=0.4)
-axes[1].legend()
-
-plt.tight_layout()
-plt.savefig("4.pdf")
-
 #=========
 # PUNTO 5
 #=========
 
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy import ndimage as ndi
-from numpy.fft import rfft, irfft, rfftfreq
-
 # --- Paths ---
-data_path = "/mnt/data/tomography_data/tomography_data/3.npy"
-out_unfiltered = "/mnt/data/4_unfiltered.png"
-out_filtered = "/mnt/data/4.png"
+data_path = "tomography_data/3.npy" # Corrected data path
+out_unfiltered = "4_unfiltered.png" # Corrected output path
+out_filtered = "4.png" # Corrected output path
 
 # --- Load projections ---
 projections = np.load(data_path)  # shape (n_angles, n_detectors) ?
