@@ -451,22 +451,22 @@ def generar_analisis_cfl():
     print("\n--- Generando Análisis de Estabilidad (CFL) (Pregunta 4) ---")
     """
     #cfl_explanation = 
-ANÁLISIS DE LA CONDICIÓN DE ESTABILIDAD (CFL) PARA KdV
-=========================================================
+    ANÁLISIS DE LA CONDICIÓN DE ESTABILIDAD (CFL) PARA KdV
+    =========================================================
 
-La ecuación de Korteweg-de Vries (KdV) contiene un término no lineal (u*u_x) y un término dispersivo (u_xxx). Cada uno impone una restricción sobre el paso de tiempo (dt) para que la simulación numérica sea estable.
+    La ecuación de Korteweg-de Vries (KdV) contiene un término no lineal (u*u_x) y un término dispersivo (u_xxx). Cada uno impone una restricción sobre el paso de tiempo (dt) para que la simulación numérica sea estable.
 
-1.  Término no lineal: Requiere dt ∝ dx.
-2.  Término dispersivo: Requiere dt ∝ dx³.
+    1.  Término no lineal: Requiere dt ∝ dx.
+    2.  Término dispersivo: Requiere dt ∝ dx³.
 
-La condición más restrictiva es la del término dispersivo. Por lo tanto, para garantizar la estabilidad, se debe cumplir que:
+    La condición más restrictiva es la del término dispersivo. Por lo tanto, para garantizar la estabilidad, se debe cumplir que:
 
     dt / dx³ < C
-    """
+    
     with open('3_CondicionCFL.txt', 'w', encoding='utf-8') as f:
         f.write(cfl_explanation)
     print("Archivo '3_CondicionCFL.txt' generado.")
-
+    """
     L = 20.0; T = 5.0; dx = 0.5
     x = np.arange(0, L, dx)
     psi0 = soliton(x, A=2.0, x0=5.0)
