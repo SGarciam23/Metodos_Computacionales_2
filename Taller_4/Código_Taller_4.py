@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 from matplotlib.animation import FuncAnimation
 
-plt.rcParams['animation.ffmpeg_path'] = r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
+#plt.rcParams['animation.ffmpeg_path'] = r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
 
 ts = np.linspace(0, 150, 150)
 psi = np.zeros((len(ts), 4))
@@ -56,10 +56,10 @@ V2 = ((x0)**2)/50
 V3 = (1/50)*((x0**4/100)-x0**2)
 
 def simula_y_anima(V, nombre_salida, titulo):
-    """
-    Resuelve la ecuación de Schrödinger para un potencial V(x)
-    y guarda la animación en un archivo mp4.
-    """
+    
+    """Resuelve la ecuación de Schrödinger para un potencial V(x)
+    y guarda la animación en un archivo mp4."""
+    
     # 1. Resolver la ecuación
     sol = solve_ivp(
         schrodinger,
@@ -184,7 +184,7 @@ def guardar_patron(img, titulo, params, cmap='viridis', Lx=3.0, Ly=3.0, extra=''
   guardar_titulo = titulo.replace(' ', '_')
   fnombre = f"2_{guardar_titulo}.png"
   plt.tight_layout()
-  plt.savefig(fnombre)
+  plt.savefig("Taller_4/"+fnombre)
   plt.close()
 
 # Ejecución
@@ -215,6 +215,35 @@ if __name__ == "__main__":
 
   u, v, _ = imex(u0, v0, params, Lx=Lx, Ly=Ly, T=T_max, dt=dt)
   guardar_patron(u, "patrón_base", params, cmap='cividis', Lx=Lx, Ly=Ly)
+
+  # ...existing code...
+# Agrego generación automática de 4 patrones adicionales variando F y G
+# Cada bloque crea un diccionario 'params' compatible con guardar_patron/imex y guarda la imagen
+
+# lista de configuraciones extra: nombre archivo, parámetros para F/G, y mapa de colores
+extra_patterns = [
+    {
+        'name': 'thin_spots',
+        'params': {
+            'alpha': 0.0004, 'beta': 0.03,
+            'F': lambda u, v: F_suave(u, v, c=8, d=0.5),
+            'G': lambda u, v: G_suave(u, v, k=14.0),
+            'F_text': "u - 8*u*v^2 - v - 0.5",
+            'G_text': "14*(u - v)"
+        },
+        'cmap': 'viridis'
+    }
+]
+
+# bucle que genera y guarda cada patrón adicional usando las funciones ya definidas
+for item in extra_patterns:
+    params_i = item['params']                       # obtengo el diccionario de parámetros
+    # resuelvo el sistema con las condiciones iniciales u0,v0, mismos Lx,Ly,T_max,dt usados arriba
+    u_res, v_res, _ = imex(u0, v0, params_i, Lx=Lx, Ly=Ly, T=T_max, dt=dt)
+    # guardo la imagen con el nombre indicado y usando la misma función guardar_patron
+    guardar_patron(u_res, f"2_{item['name']}", params_i, cmap=item['cmap'], Lx=Lx, Ly=Ly)
+
+# ...existing code...
 
 #  params_base = {
 #    'alpha': 0.00028, 'beta': 0.05,
@@ -420,8 +449,8 @@ def generar_animacion_interaccion():
 
 def generar_analisis_cfl():
     print("\n--- Generando Análisis de Estabilidad (CFL) (Pregunta 4) ---")
-
-    cfl_explanation = """
+    """
+    #cfl_explanation = 
 ANÁLISIS DE LA CONDICIÓN DE ESTABILIDAD (CFL) PARA KdV
 =========================================================
 
@@ -433,7 +462,7 @@ La ecuación de Korteweg-de Vries (KdV) contiene un término no lineal (u*u_x) y
 La condición más restrictiva es la del término dispersivo. Por lo tanto, para garantizar la estabilidad, se debe cumplir que:
 
     dt / dx³ < C
-"""
+    """
     with open('3_CondicionCFL.txt', 'w', encoding='utf-8') as f:
         f.write(cfl_explanation)
     print("Archivo '3_CondicionCFL.txt' generado.")
